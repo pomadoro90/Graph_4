@@ -486,11 +486,12 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
         add_box(name + "_counterweight_pin_lug_" + side, (x + sx, pin_y, pin_z - 0.08 * s), (0.34 * s, 0.18 * s, 0.28 * s), MATS["orange"], bevel=0.025 * s)
 
         # Большой серповидный противовес на кривошипной щеке: его дуга
-        # построена вокруг crank_y/crank_z, а сектор расположен с нижней
-        # стороны, противоположно поднятому пальцу шатуна.
-        counterweight_angles = (205, 335)
+        # построена вокруг crank_y/crank_z. Сектор развёрнут к пальцу шатуна
+        # и вертикальным связующим звеньям, чтобы груз визуально крепился
+        # в той же рабочей зоне, а не висел снизу под редуктором.
+        counterweight_angles = (82, 202)
         add_annular_sector(name + "_counterweight_segment_" + side, (x + sx, crank_y, crank_z), 0.98 * s, 0.54 * s, 0.30 * s, *counterweight_angles, MATS["orange"], segments=24)
-        for bolt_i, ang_deg in enumerate((222, 270, 318), start=1):
+        for bolt_i, ang_deg in enumerate((102, 142, 182), start=1):
             a = math.radians(ang_deg)
             add_cylinder(
                 f"{name}_counterweight_bolt_{side}_{bolt_i}",
