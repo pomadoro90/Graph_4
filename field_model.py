@@ -131,6 +131,19 @@ def add_cylinder(name: str, loc: Vec3, radius: float, depth: float, material, ve
     return obj
 
 
+def add_joint_ball(name: str, loc: Vec3, radius: float, material, segments=24):
+    """Сферическая сварная муфта/тройник для закрытия визуальных стыков труб."""
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=segments, ring_count=max(8, segments // 2), radius=radius, location=loc)
+    obj = bpy.context.active_object
+    obj.name = name
+    assign(obj, material)
+    try:
+        bpy.ops.object.shade_smooth()
+    except Exception:
+        pass
+    return obj
+
+
 def add_cone(name: str, loc: Vec3, r1: float, r2: float, depth: float, material, vertices=32):
     bpy.ops.mesh.primitive_cone_add(vertices=vertices, radius1=r1, radius2=r2, depth=depth, location=loc)
     obj = bpy.context.active_object
@@ -604,6 +617,35 @@ def add_facility_upsv(loc: Vec3):
     add_label("УПСВ\nпредварительный\nсброс воды", (x, y - 4.0, z + 0.08), size=0.32)
 
 
+def add_export_pump_block_connected(name: str, loc: Vec3):
+    """Насосный блок УПН без визуально тупиковых патрубков.
+
+    В отличие от универсального add_pump_block(), здесь входной и напорный
+    коллекторы заданы как крупные видимые трубы, а каждая насосная ветка
+    явно врезана в оба коллектора. Это убирает эффект "висящих" коротких
+    жёлтых патрубков на крупном рендере УПН.
+    """
+    x, y, z = loc
+    yy_list = [y - 0.45, y + 0.45]
+    suction_x = x - 1.28
+    discharge_x = x + 1.12
+    add_box(name + "_common_skid", (x, y, z + 0.12), (2.55, 1.55, 0.18), MATS["steel"])
+    cylinder_between(name + "_visible_suction_header", (suction_x, y - 0.60, z + 0.55), (suction_x, y + 0.60, z + 0.55), 0.13, MATS["steel"], vertices=24)
+    cylinder_between(name + "_visible_discharge_header", (discharge_x, y - 0.60, z + 0.62), (discharge_x, y + 0.60, z + 0.62), 0.135, MATS["pipe_product"], vertices=26)
+    add_flange(name + "_suction_header_lower_cap", (suction_x, y - 0.60, z + 0.55), (0, -1, 0), 0.145, MATS["steel"])
+    add_flange(name + "_suction_header_upper_cap", (suction_x, y + 0.60, z + 0.55), (0, 1, 0), 0.145, MATS["steel"])
+    add_flange(name + "_discharge_header_lower_cap", (discharge_x, y - 0.60, z + 0.62), (0, -1, 0), 0.15, MATS["steel"])
+    add_flange(name + "_discharge_header_upper_cap", (discharge_x, y + 0.60, z + 0.62), (0, 1, 0), 0.15, MATS["steel"])
+    for i, yy in enumerate(yy_list, start=1):
+        add_box(f"{name}_pump_base_{i}", (x, yy, z + 0.24), (1.58, 0.48, 0.14), MATS["steel"])
+        add_box(f"{name}_pump_{i}", (x, yy, z + 0.50), (1.18, 0.36, 0.38), MATS["orange"])
+        add_cylinder(f"{name}_motor_{i}", (x - 0.78, yy, z + 0.51), 0.20, 0.55, MATS["green"], axis="X", vertices=20)
+        cylinder_between(f"{name}_suction_tie_{i}", (suction_x, yy, z + 0.55), (x - 0.58, yy, z + 0.55), 0.09, MATS["steel"], vertices=18)
+        cylinder_between(f"{name}_discharge_tie_{i}", (x + 0.58, yy, z + 0.62), (discharge_x, yy, z + 0.62), 0.105, MATS["pipe_product"], vertices=20)
+        add_flange(f"{name}_suction_tie_flange_{i}", (suction_x, yy, z + 0.55), (0, 1, 0), 0.135, MATS["steel"])
+        add_flange(f"{name}_discharge_tie_flange_{i}", (discharge_x, yy, z + 0.62), (0, 1, 0), 0.145, MATS["steel"])
+
+
 def add_facility_upn(loc: Vec3):
     x, y, z = loc
     add_pad("UPN_pad", loc, 11.0, 8.0)
@@ -611,7 +653,7 @@ def add_facility_upn(loc: Vec3):
     add_box("UPN_heater", (x - 2.5, y - 1.4, z + 0.75), (2.7, 1.15, 1.5), MATS["orange"])
     add_tank("UPN_sales_tank_A", (x + 1.2, y + 1.2, z), radius=0.95, height=2.1, label="товарная\nнефть")
     add_tank("UPN_sales_tank_B", (x + 3.4, y + 1.2, z), radius=0.95, height=2.1)
-    add_pump_block("UPN_export_pumps", (x + 2.3, y - 1.85, z), count=2)
+    add_export_pump_block_connected("UPN_export_pumps", (x + 2.3, y - 1.85, z))
     add_label("УПН\nподготовка нефти", (x, y - 4.5, z + 0.08), size=0.34)
 
 
@@ -763,21 +805,81 @@ def build_field():
     # вправо. Без лишнего близкого зигзага у корпуса.
     pipe_path("UPSV_to_UPN_oil", [(5.02, 1.1, 1.10), (6.15, 1.1, 1.10), (6.15, 0.45, 1.24), (12.57, 0.45, 1.24)], 0.15, MATS["pipe_oil"])
     add_flange("UPSV_oil_outlet_clear_tie_in", (5.04, 1.1, 1.10), (1, 0, 0), 0.15, MATS["steel"])
-    # Обвязка УПН / экспорта: прежняя трасса давала визуальный "клубок" у
-    # правого большого колена — всасывающая линия от резервуаров и напорный
-    # экспортный коллектор шли почти в одной плоскости, а фланцы попадали прямо
-    # в зону поворотов. Ниже линии разведены по Y/Z и подключены короткими
-    # прямыми штуцерами к резервуарам/насосам.
-    cylinder_between("UPN_sales_tank_A_product_nozzle", (17.95, 1.2, 1.23), (18.45, 1.2, 1.23), 0.105, MATS["pipe_product"], vertices=20)
-    cylinder_between("UPN_sales_tank_B_product_nozzle", (20.15, 1.2, 1.23), (20.65, 1.2, 1.23), 0.105, MATS["pipe_product"], vertices=20)
-    add_flange("UPN_tank_A_outlet_flange", (18.45, 1.2, 1.23), (1, 0, 0), 0.135, MATS["steel"])
-    add_flange("UPN_tank_B_outlet_flange", (20.65, 1.2, 1.23), (1, 0, 0), 0.135, MATS["steel"])
-    pipe_path("UPN_tanks_suction_header", [(18.45, 1.2, 1.23), (18.45, 0.25, 1.23), (20.65, 0.25, 1.23), (20.65, 1.2, 1.23)], 0.115, MATS["pipe_product"])
-    pipe_path("UPN_tank_to_export_pumps", [(19.55, 0.25, 1.23), (19.55, -0.95, 1.23), (18.92, -0.95, 1.06), (18.92, -1.85, 1.06)], 0.13, MATS["pipe_product"])
-    add_flange("UPN_export_pumps_suction_tie_in", (18.92, -1.85, 1.06), (0, -1, 0), 0.14, MATS["steel"])
+    # Обвязка УПН / экспорта собрана вручную как непрерывная сеть: здесь
+    # нельзя использовать автоподрезку pipe_path() на коротких расстояниях,
+    # иначе прямые куски исчезают и патрубки выглядят висящими. Сегменты ниже
+    # специально слегка пересекаются в углах/фланцах, чтобы на рендере не было
+    # разрывов: резервуары -> всасывающий коллектор -> насосы -> экспорт.
+    tank_a_nozzle = (18.20, 1.20, 1.12)
+    tank_b_nozzle = (20.40, 1.20, 1.12)
+    suction_header_l = (18.20, -0.18, 1.12)
+    suction_header_r = (20.40, -0.18, 1.12)
+    suction_drop_high = (19.30, -1.18, 1.12)
+    suction_drop_low = (19.30, -1.18, 0.55)
+    suction_before_pump = (18.02, -1.18, 0.55)
+    pump_suction = (18.02, -1.85, 0.55)
+    for nm, a, b, rad in [
+        ("UPN_tank_A_to_suction_header_no_gap", tank_a_nozzle, suction_header_l, 0.105),
+        ("UPN_tank_B_to_suction_header_no_gap", tank_b_nozzle, suction_header_r, 0.105),
+        ("UPN_tanks_suction_header_no_gap", suction_header_l, suction_header_r, 0.115),
+        ("UPN_suction_header_to_pump_run_no_gap", (19.30, -0.18, 1.12), suction_drop_high, 0.13),
+        ("UPN_suction_header_vertical_drop_no_gap", suction_drop_high, suction_drop_low, 0.13),
+        ("UPN_suction_to_pump_header_no_gap", suction_drop_low, suction_before_pump, 0.13),
+        ("UPN_suction_pump_tie_in_no_gap", suction_before_pump, pump_suction, 0.13),
+    ]:
+        cylinder_between(nm, a, b, rad, MATS["pipe_product"], vertices=24)
+    for nm, p, d, rad in [
+        ("UPN_tank_A_outlet_flange", tank_a_nozzle, (0, -1, 0), 0.135),
+        ("UPN_tank_B_outlet_flange", tank_b_nozzle, (0, -1, 0), 0.135),
+        ("UPN_suction_header_center_coupling", (19.30, -0.18, 1.12), (1, 0, 0), 0.135),
+        ("UPN_export_pumps_suction_tie_in", pump_suction, (-1, 0, 0), 0.14),
+    ]:
+        add_flange(nm, p, d, rad, MATS["steel"])
+    for idx, p in enumerate([(18.20, -0.18, 1.12), (19.30, -0.68, 1.12), (18.02, -1.18, 0.55), (20.40, -0.18, 1.12)], start=1):
+        add_pipe_support_at(f"UPN_suction_connected_support_{idx}", p, 0.115)
 
-    cylinder_between("UPN_export_pumps_discharge_spool", (19.82, -1.85, 1.14), (20.28, -1.85, 1.14), 0.12, MATS["pipe_product"], vertices=22)
-    pipe_path("UPN_sales_oil_export", [(20.28, -1.85, 1.14), (21.20, -1.85, 1.14), (21.20, -2.65, 1.14), (24.80, -2.65, 1.14), (24.80, -4.35, 1.14), (29.0, -4.35, 1.14)], 0.16, MATS["pipe_product"])
+    # Явно показываем общий напорный коллектор насосов: штатные короткие
+    # патрубки внутри add_pump_block() слишком тонкие и на рендере нижний насос
+    # читался как тупиковый/висящий. Этот коллектор перекрывает их и соединяет
+    # обе насосные ветки с вертикальным выходом на экспорт.
+    discharge_header_a = (20.42, -2.36, 0.62)
+    discharge_header_b = (20.42, -1.34, 0.62)
+    cylinder_between("UPN_export_pumps_visible_common_discharge_header", discharge_header_a, discharge_header_b, 0.135, MATS["pipe_product"], vertices=26)
+    for idx, yy in enumerate([-2.30, -1.40], start=1):
+        cylinder_between(f"UPN_export_pump_{idx}_visible_discharge_tie", (19.92, yy, 0.62), (20.48, yy, 0.62), 0.105, MATS["pipe_product"], vertices=22)
+        add_flange(f"UPN_export_pump_{idx}_visible_discharge_flange", (20.42, yy, 0.62), (0, 1, 0), 0.145, MATS["steel"])
+    add_flange("UPN_export_pumps_common_header_lower_cap", discharge_header_a, (0, -1, 0), 0.15, MATS["steel"])
+    add_flange("UPN_export_pumps_common_header_upper_cap", discharge_header_b, (0, 1, 0), 0.15, MATS["steel"])
+
+    export_points = [
+        (20.42, -1.85, 0.62),
+        (20.42, -1.85, 1.12),
+        (21.40, -1.85, 1.12),
+        (21.40, -2.70, 1.12),
+        (24.85, -2.70, 1.12),
+        (24.85, -4.35, 1.12),
+        (29.00, -4.35, 1.12),
+    ]
+    for idx, (a, b) in enumerate(zip(export_points, export_points[1:]), start=1):
+        cylinder_between(f"UPN_sales_oil_export_connected_{idx:02d}", a, b, 0.16, MATS["pipe_product"], vertices=28)
+    for idx, p in enumerate(export_points[1:-1], start=1):
+        add_flange(f"UPN_sales_oil_export_connected_coupling_{idx}", p, (1, 0, 0), 0.18, MATS["steel"])
+    add_flange("UPN_export_pumps_discharge_flange", export_points[0], (1, 0, 0), 0.15, MATS["steel"])
+    add_flange("UPN_sales_export_boundary_flange", export_points[-1], (1, 0, 0), 0.18, MATS["steel"])
+    for idx, p in enumerate([(22.70, -2.70, 1.12), (24.85, -3.55, 1.12), (27.20, -4.35, 1.12)], start=1):
+        add_pipe_support_at(f"UPN_export_connected_support_{idx}", p, 0.16)
+
+    # Крупные сварные муфты/тройники закрывают все точки врезки и углы, чтобы
+    # на рендере не было открытых торцов и "висящих" коротких патрубков.
+    for idx, p in enumerate([
+        tank_a_nozzle, tank_b_nozzle,
+        suction_header_l, suction_header_r, (19.30, -0.18, 1.12),
+        suction_drop_high, suction_drop_low, suction_before_pump, pump_suction,
+        (20.42, -2.30, 0.62), (20.42, -1.40, 0.62), (20.42, -1.85, 0.62),
+        (20.42, -1.85, 1.12), (21.40, -1.85, 1.12), (21.40, -2.70, 1.12),
+        (24.85, -2.70, 1.12), (24.85, -4.35, 1.12),
+    ], start=1):
+        add_joint_ball(f"UPN_export_no_gap_welded_joint_{idx:02d}", p, 0.175, MATS["pipe_product"], segments=24)
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
 
     # Вода: УПСВ/КНС -> БКНС -> нагнетательная скважина
