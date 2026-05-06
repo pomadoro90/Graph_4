@@ -17,12 +17,20 @@ namespace Graph4.OilField
         public bool isRunning;
         [Range(0.05f, 6f)] public float flowSpeed = 1f;
         public FluidFlowAnimator[] flowAnimators;
+        public PumpjackAnimator[] pumpjackAnimators;
 
         private void Awake()
         {
+            RefreshAnimators();
+            ApplyState();
+        }
+
+        public void RefreshAnimators()
+        {
             if (flowAnimators == null || flowAnimators.Length == 0)
                 flowAnimators = FindObjectsOfType<FluidFlowAnimator>();
-            ApplyState();
+            if (pumpjackAnimators == null || pumpjackAnimators.Length == 0)
+                pumpjackAnimators = FindObjectsOfType<PumpjackAnimator>();
         }
 
         private void Update()
@@ -35,6 +43,14 @@ namespace Graph4.OilField
 
             if (Input.GetKeyDown(slowerKey))
                 SetSpeed(flowSpeed / 1.25f);
+        }
+
+        private void OnGUI()
+        {
+            string label = isRunning ? "Остановить анимации" : "Запустить анимации";
+            if (GUI.Button(new Rect(18, 18, 210, 42), label))
+                ToggleProcess();
+            GUI.Label(new Rect(18, 64, 260, 24), $"Скорость: {flowSpeed:0.00}x  (+ / -)");
         }
 
         public void ToggleProcess()
@@ -63,12 +79,24 @@ namespace Graph4.OilField
 
         private void ApplyState()
         {
-            if (flowAnimators == null) return;
-            foreach (var animator in flowAnimators)
+            RefreshAnimators();
+            if (flowAnimators != null)
             {
-                if (animator == null) continue;
-                animator.SetRunning(isRunning);
-                animator.SetSpeed(flowSpeed);
+                foreach (var animator in flowAnimators)
+                {
+                    if (animator == null) continue;
+                    animator.SetRunning(isRunning);
+                    animator.SetSpeed(flowSpeed);
+                }
+            }
+            if (pumpjackAnimators != null)
+            {
+                foreach (var animator in pumpjackAnimators)
+                {
+                    if (animator == null) continue;
+                    animator.SetRunning(isRunning);
+                    animator.SetSpeed(flowSpeed);
+                }
             }
         }
     }

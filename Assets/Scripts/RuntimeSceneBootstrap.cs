@@ -21,6 +21,7 @@ namespace Graph4.OilField
             EnsureTerrain();
             EnsureCamera();
             GameObject field = EnsureOilFieldModel();
+            AttachPumpjackAnimators(field != null ? field.transform : null);
             CreateFlowDemo(field != null ? field.transform : null);
         }
 
@@ -107,6 +108,37 @@ namespace Graph4.OilField
                 else if (n.Contains("oil") && oilMaterial != null)
                     renderer.sharedMaterial = oilMaterial;
             }
+        }
+
+        private void AttachPumpjackAnimators(Transform parent)
+        {
+            Transform searchRoot = parent != null ? parent : transform;
+            for (int i = 1; i <= 3; i++)
+            {
+                Transform beamPivot = FindChildContains(searchRoot, $"Producing_well_{i}_ANIM_beam_pivot");
+                if (beamPivot == null) continue;
+                GameObject rigRoot = new GameObject($"Producing_well_{i}_runtime_animator");
+                rigRoot.transform.SetParent(searchRoot, false);
+                var animator = rigRoot.AddComponent<PumpjackAnimator>();
+                animator.beamPivot = beamPivot;
+                animator.crankLeft = FindChildContains(searchRoot, $"Producing_well_{i}_ANIM_crank_L");
+                animator.crankRight = FindChildContains(searchRoot, $"Producing_well_{i}_ANIM_crank_R");
+                Transform pitmanL = FindChildContains(searchRoot, $"Producing_well_{i}_pitman_L");
+                Transform pitmanR = FindChildContains(searchRoot, $"Producing_well_{i}_pitman_R");
+                animator.pitmans = pitmanL != null && pitmanR != null ? new[] { pitmanL, pitmanR } : new Transform[0];
+                animator.bridleCable = FindChildContains(searchRoot, $"Producing_well_{i}_bridle_cable");
+            }
+        }
+
+        private static Transform FindChildContains(Transform root, string token)
+        {
+            if (root == null || string.IsNullOrEmpty(token)) return null;
+            token = token.ToLowerInvariant();
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name.ToLowerInvariant().Contains(token)) return child;
+            }
+            return null;
         }
 
         private void CreateFlowDemo(Transform parent)

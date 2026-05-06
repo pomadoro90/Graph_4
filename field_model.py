@@ -331,16 +331,19 @@ def pipe_path(name: str, points: Iterable[Vec3], radius: float, material, elevat
 
 
 def add_label(text: str, loc: Vec3, size=0.42, rot_z=0.0):
-    # Подписи сделаны крупнее, чем физический масштаб объектов: это учебная
-    # обзорная схема, где важнее читаемость технологических узлов.
-    bpy.ops.object.text_add(location=loc, rotation=(math.radians(70), 0, rot_z))
+    # Подписи сделаны крупнее и подняты выше поверхностей: раньше текстовые
+    # объекты лежали слишком близко к плитам/земле и местами пропадали в
+    # текстурах из-за z-fighting.
+    x, y, z = loc
+    raised_loc = (x, y, z + 0.62)
+    bpy.ops.object.text_add(location=raised_loc, rotation=(math.radians(66), 0, rot_z))
     obj = bpy.context.active_object
     obj.name = "Label_" + text
     obj.data.body = text
     obj.data.align_x = "CENTER"
     obj.data.align_y = "CENTER"
     obj.data.size = size * 1.45
-    obj.data.extrude = 0.012
+    obj.data.extrude = 0.018
     assign(obj, MATS["text"])
     return obj
 
@@ -716,6 +719,234 @@ def add_arrow(name: str, loc: Vec3, direction="X", material=None):
     return obj
 
 
+
+# ---------------------------------------------------------------------------
+# Анимации: нефтекачки и движущиеся стрелки потоков
+# ---------------------------------------------------------------------------
+
+
+def _make_empty(name: str, loc: Vec3):
+    empty = bpy.data.objects.new(name, None)
+    empty.empty_display_type = "PLAIN_AXES"
+    empty.empty_display_size = 0.55
+    empty.location = loc
+    bpy.context.collection.objects.link(empty)
+    return empty
+
+
+def _parent_keep_world(obj, parent):
+    mw = obj.matrix_world.copy()
+    obj.parent = parent
+    obj.matrix_world = mw
+
+
+def _safe_obj(name: str):
+    return bpy.data.objects.get(name)
+
+
+def _rotate_yz_about(point_yz, pivot_yz, angle):
+    py, pz = pivot_yz
+    y0, z0 = point_yz
+    dy, dz = y0 - py, z0 - pz
+    ca, sa = math.cos(angle), math.sin(angle)
+    return (py + dy * ca - dz * sa, pz + dy * sa + dz * ca)
+
+
+def _circle_intersections(c1, r1, c2, r2):
+    y1, z1 = c1
+    y2, z2 = c2
+    dy, dz = y2 - y1, z2 - z1
+    d = math.hypot(dy, dz)
+    if d < 1e-6 or d > r1 + r2 or d < abs(r1 - r2):
+        return []
+    a = (r1 * r1 - r2 * r2 + d * d) / (2 * d)
+    h2 = max(0.0, r1 * r1 - a * a)
+    h = math.sqrt(h2)
+    ym = y1 + a * dy / d
+    zm = z1 + a * dz / d
+    oy = -dz / d * h
+    oz = dy / d * h
+    return [(ym + oy, zm + oz), (ym - oy, zm - oz)]
+
+
+def _set_cylinder_between_keyframed(obj, p1: Vec3, p2: Vec3, base_len: float, frame: int):
+    if obj is None:
+        return
+    v1, v2 = Vector(p1), Vector(p2)
+    mid = (v1 + v2) / 2
+    direction = v2 - v1
+    length = max(direction.length, 1e-4)
+    obj.location = tuple(mid)
+    obj.rotation_euler = direction.to_track_quat("Z", "Y").to_euler()
+    obj.scale.z = length / max(base_len, 1e-4)
+    obj.keyframe_insert(data_path="location", frame=frame)
+    obj.keyframe_insert(data_path="rotation_euler", frame=frame)
+    obj.keyframe_insert(data_path="scale", frame=frame)
+
+
+def add_pumpjack_animation(name: str, loc: Vec3, scale=0.8, start_frame=1, end_frame=120):
+    """Запекает кинематику реального четырёхзвенника станка-качалки.
+
+    Фиксированы: шарнир балансира, ось кривошипа/противовесов, длина шатунов,
+    точка входа подвеса в землю. Меняется только угол балансира, вращение
+    кривошипа и длина вертикального подвеса.
+    """
+    x, y, z = loc
+    s = scale
+    pivot = (x, y, z + 5.28 * s)
+    crank = (x, y + 3.10 * s, z + 1.45 * s)
+    beam_len = 8.0 * s
+    beam_y0 = y - 0.80 * s
+    beam_z = z + 5.55 * s
+    beam_rear_rest = (beam_y0 + beam_len / 2 - 0.3 * s, beam_z - 0.35 * s)
+    pin_rest = (y + 3.10 * s - 0.55 * s, z + 1.45 * s + 0.45 * s)
+    cable_y = beam_y0 - beam_len / 2 - 0.75 * s
+    cable_top_rest = (cable_y, beam_z - 1.20 * s)
+    cable_ground = (x, cable_y, z + 0.9 * s)
+    crank_radius = math.hypot(pin_rest[0] - crank[1], pin_rest[1] - crank[2])
+    crank_rest_angle = math.atan2(pin_rest[1] - crank[2], pin_rest[0] - crank[1])
+    beam_radius = math.hypot(beam_rear_rest[0] - pivot[1], beam_rear_rest[1] - pivot[2])
+    beam_rest_angle = math.atan2(beam_rear_rest[1] - pivot[2], beam_rear_rest[0] - pivot[1])
+    pitman_len = math.hypot(beam_rear_rest[0] - pin_rest[0], beam_rear_rest[1] - pin_rest[1])
+
+    beam_empty = _make_empty(name + "_ANIM_beam_pivot", pivot)
+    for suffix in ("_beam_top_flange", "_beam_bottom_flange", "_beam_web", "_horse_head_curved"):
+        obj = _safe_obj(name + suffix)
+        if obj:
+            _parent_keep_world(obj, beam_empty)
+
+    crank_empties = []
+    for side in ("L", "R"):
+        sx = (-0.95 if side == "L" else 0.95) * s
+        empty = _make_empty(name + f"_ANIM_crank_{side}", (x + sx, crank[1], crank[2]))
+        crank_empties.append(empty)
+        for mid in ("_crank_axis_hub_", "_crank_arm_", "_crank_pin_hub_", "_counterweight_pin_lug_", "_counterweight_segment_"):
+            obj = _safe_obj(name + mid + side)
+            if obj:
+                _parent_keep_world(obj, empty)
+        for bolt_i in (1, 2, 3):
+            obj = _safe_obj(f"{name}_counterweight_bolt_{side}_{bolt_i}")
+            if obj:
+                _parent_keep_world(obj, empty)
+
+    pitmans = []
+    for side in ("L", "R"):
+        obj = _safe_obj(name + "_pitman_" + side)
+        sx = (-0.95 if side == "L" else 0.95) * s
+        top_x = x + sx * 0.45
+        bot_x = x + sx
+        base_len = obj.dimensions.z if obj else pitman_len
+        pitmans.append((obj, top_x, bot_x, base_len))
+    cable = _safe_obj(name + "_bridle_cable")
+    cable_base_len = cable.dimensions.z if cable else max(0.2, cable_top_rest[1] - cable_ground[2])
+
+    scene = bpy.context.scene
+    frames = list(range(start_frame, end_frame + 1, 10))
+    if frames[-1] != end_frame:
+        frames.append(end_frame)
+    for frame in frames:
+        t = (frame - start_frame) / max(1, end_frame - start_frame)
+        crank_angle = crank_rest_angle + 2 * math.pi * t
+        pin_yz = (crank[1] + crank_radius * math.cos(crank_angle), crank[2] + crank_radius * math.sin(crank_angle))
+        candidates = _circle_intersections((pivot[1], pivot[2]), beam_radius, pin_yz, pitman_len)
+        if candidates:
+            # Берём верхнюю сборочную ветвь и ближайшее к рабочему диапазону решение.
+            beam_attach = max(candidates, key=lambda p: p[1])
+            beam_angle = math.atan2(beam_attach[1] - pivot[2], beam_attach[0] - pivot[1])
+            beam_delta = beam_angle - beam_rest_angle
+        else:
+            beam_delta = math.radians(7.0) * math.sin(2 * math.pi * t)
+            beam_attach = _rotate_yz_about(beam_rear_rest, (pivot[1], pivot[2]), beam_delta)
+        beam_empty.rotation_euler = (beam_delta, 0, 0)
+        beam_empty.keyframe_insert(data_path="rotation_euler", frame=frame)
+        crank_delta = crank_angle - crank_rest_angle
+        for empty in crank_empties:
+            empty.rotation_euler = (crank_delta, 0, 0)
+            empty.keyframe_insert(data_path="rotation_euler", frame=frame)
+        for obj, top_x, bot_x, base_len in pitmans:
+            _set_cylinder_between_keyframed(obj, (bot_x, pin_yz[0], pin_yz[1]), (top_x, beam_attach[0], beam_attach[1]), base_len, frame)
+        cable_top_yz = _rotate_yz_about(cable_top_rest, (pivot[1], pivot[2]), beam_delta)
+        _set_cylinder_between_keyframed(cable, cable_ground, (x, cable_top_yz[0], cable_top_yz[1]), cable_base_len, frame)
+
+    # Линейная интерполяция и циклическое повторение.
+    for obj in [beam_empty, *crank_empties, cable] + [p[0] for p in pitmans]:
+        if obj is None or obj.animation_data is None or obj.animation_data.action is None:
+            continue
+        for fc in obj.animation_data.action.fcurves:
+            for kp in fc.keyframe_points:
+                kp.interpolation = "BEZIER"
+            try:
+                fc.modifiers.new(type="CYCLES")
+            except Exception:
+                pass
+
+
+def animate_flow_arrow(name: str, path, start_frame=1, end_frame=120):
+    obj = _safe_obj(name)
+    stand = _safe_obj(name + "_stand")
+    if obj is None or len(path) < 2:
+        return
+    total = 0.0
+    lengths = []
+    pts = [Vector(p) for p in path]
+    for a, b in zip(pts, pts[1:]):
+        l = (b - a).length
+        lengths.append(l)
+        total += l
+    if total <= 1e-6:
+        return
+    frames = list(range(start_frame, end_frame + 1, 8))
+    if frames[-1] != end_frame:
+        frames.append(end_frame)
+    for frame in frames:
+        t = ((frame - start_frame) / max(1, end_frame - start_frame)) % 1.0
+        d = t * total
+        acc = 0.0
+        seg_i = 0
+        for i, l in enumerate(lengths):
+            if acc + l >= d:
+                seg_i = i
+                break
+            acc += l
+        a, b = pts[seg_i], pts[seg_i + 1]
+        u = 0.0 if lengths[seg_i] <= 1e-6 else (d - acc) / lengths[seg_i]
+        pos = a.lerp(b, u)
+        direction = (b - a).normalized()
+        yaw = math.atan2(direction.y, direction.x)
+        obj.location = tuple(pos)
+        obj.rotation_euler = (0, 0, yaw)
+        obj.keyframe_insert(data_path="location", frame=frame)
+        obj.keyframe_insert(data_path="rotation_euler", frame=frame)
+        if stand:
+            stand.location = (pos.x, pos.y, pos.z - 0.11)
+            stand.keyframe_insert(data_path="location", frame=frame)
+    for animated in (obj, stand):
+        if animated is None or animated.animation_data is None or animated.animation_data.action is None:
+            continue
+        for fc in animated.animation_data.action.fcurves:
+            for kp in fc.keyframe_points:
+                kp.interpolation = "LINEAR"
+            try:
+                fc.modifiers.new(type="CYCLES")
+            except Exception:
+                pass
+
+
+def add_scene_animations():
+    scene = bpy.context.scene
+    scene.frame_start = 1
+    scene.frame_end = 120
+    scene.render.fps = 24
+    pump_scale = 0.72
+    for i, p in enumerate([(-22, -9, 0), (-17, -11, 0), (-20, -4, 0)], start=1):
+        add_pumpjack_animation(f"Producing_well_{i}", p, scale=pump_scale, start_frame=1, end_frame=120)
+    animate_flow_arrow("Arrow_gathering", [(-13, -6, 1.15), (-10.5, -6, 1.15), (-10.5, -1.9, 1.15), (-7.88, -1.9, 1.15)])
+    animate_flow_arrow("Arrow_dns_upsv", [(-4.70, -1.9, 1.35), (-1.0, -1.9, 1.35), (-1.0, 1.1, 1.35), (1.54, 1.1, 1.35)])
+    animate_flow_arrow("Arrow_upsv_upn", [(5.02, 1.1, 1.40), (5.02, -1.25, 1.40), (12.57, -1.25, 1.40), (12.57, 1.0, 1.40)])
+    animate_flow_arrow("Arrow_export", [(20.42, -1.85, 1.32), (29.0, -1.85, 1.32)])
+    animate_flow_arrow("Arrow_water_to_bkns", [(11.35, 13.85, 1.15), (-5.18, 13.85, 1.15), (-5.18, 12.0, 1.15)])
+    animate_flow_arrow("Arrow_water_to_inj", [(-2.78, 12.0, 1.25), (-2.78, 15.0, 1.25), (-0.20, 15.0, 1.25)])
+
 # ---------------------------------------------------------------------------
 # Компоновка месторождения
 # ---------------------------------------------------------------------------
@@ -786,15 +1017,13 @@ def build_field():
     # Конец магистрали теперь стыкуется с фланцем левой крышки сепаратора, а не пересекает корпус.
     pipe_path("UPSV_separator_nozzle_spool", [(1.54, 1.1, 1.10), (1.70, 1.1, 1.10)], 0.095, MATS["pipe_oil"])
     add_flange("UPSV_separator_inlet_extra_flange", (1.68, 1.1, 1.10), (-1, 0, 0), 0.13, MATS["steel"])
-    # Правая сторона УПСВ -> УПН: проблемное тесное колено у водяного бака
-    # заменено на один читаемый диагональный вынос. Трасса сначала уходит
-    # наружу от корпуса УПСВ, затем отдельной прямой линией идёт к УПН — без
-    # наложений трубы на бак, стойки и соседние патрубки.
+    # Правая сторона УПСВ -> УПН перенесена на свободную нижнюю трассу:
+    # короткий выход от УПСВ, затем прямой коридор вправо и подъём к treater.
+    # Так вместо косой вставки получаются читаемые тороидальные углы 90° и
+    # труба не накладывается на бак/стойки узла УПСВ.
     upsv_oil_outlet = (5.02, 1.1, 1.10)
-    upsv_clear_offset = (6.55, -0.55, 1.24)
-    cylinder_between("UPSV_to_UPN_treater_inlet_clear_diagonal_spool", upsv_oil_outlet, upsv_clear_offset, 0.15, MATS["pipe_oil"], vertices=28)
-    add_flange("UPSV_to_UPN_treater_inlet_diagonal_outer_flange", upsv_clear_offset, (1, -1, 0), 0.17, MATS["steel"])
-    pipe_path("UPSV_to_UPN_treater_inlet", [upsv_clear_offset, (12.05, -0.55, 1.24), (12.57, 1.00, 1.20)], 0.15, MATS["pipe_oil"])
+    upsv_lower_lane = (5.02, -1.25, 1.16)
+    pipe_path("UPSV_to_UPN_treater_inlet", [upsv_oil_outlet, upsv_lower_lane, (12.57, -1.25, 1.20), (12.57, 1.00, 1.20)], 0.15, MATS["pipe_oil"])
     # Критический видимый ввод в левый торец treater: отдельный осевой spool
     # слегка входит в патрубок аппарата, поэтому на рендере нет оборванного конца.
     cylinder_between("UPN_treater_left_nozzle_visible_axis_spool", (11.88, 1.00, 1.20), (12.72, 1.00, 1.20), 0.15, MATS["pipe_oil"], vertices=28)
@@ -814,25 +1043,29 @@ def build_field():
     pump_suction_top = (18.02, -1.25, 0.55)
     pump_discharge_mid = (20.42, -1.85, 0.62)
 
-    pipe_path("UPN_treater_to_sales_tank_A", [treater_out, (16.70, 1.00, 1.20), (16.70, 1.20, 1.225), tank_a_in], 0.12, MATS["pipe_product"])
+    # Treater -> первый резервуар: вместо двух мелких поворотов оставлен один
+    # короткий наклонный spool между патрубками.
+    cylinder_between("UPN_treater_to_sales_tank_A_simple_sloped_spool", treater_out, tank_a_in, 0.12, MATS["pipe_product"], vertices=28)
+    add_flange("UPN_treater_outlet_simple_flange", treater_out, (1, 0, 0), 0.15, MATS["steel"])
+    add_flange("UPN_sales_tank_A_inlet_simple_flange", tank_a_in, (1, 0, 0), 0.15, MATS["steel"])
     cylinder_between("UPN_sales_tanks_equalizing_spool", tank_a_out, tank_b_in, 0.105, MATS["pipe_product"], vertices=24)
     add_flange("UPN_sales_tank_A_equalizing_flange", tank_a_out, (1, 0, 0), 0.14, MATS["steel"])
     add_flange("UPN_sales_tank_B_equalizing_flange", tank_b_in, (1, 0, 0), 0.14, MATS["steel"])
-    pipe_path("UPN_sales_tank_B_to_export_pump_suction", [tank_b_out, (21.85, 1.20, 1.225), (21.85, -0.85, 1.05), (18.02, -0.85, 1.05), pump_suction_top], 0.13, MATS["pipe_product"])
-    add_pipe_support_at("UPN_tank_to_pump_suction_support_1", (21.85, -0.15, 1.05), 0.13)
-    add_pipe_support_at("UPN_tank_to_pump_suction_support_2", (19.65, -0.85, 1.05), 0.13)
+    # Второй резервуар -> насос: одна понятная нижняя линия без лишних обходов.
+    cylinder_between("UPN_sales_tank_B_to_export_pump_suction_simple_spool", tank_b_out, pump_suction_top, 0.13, MATS["pipe_product"], vertices=28)
+    add_flange("UPN_sales_tank_B_to_pump_suction_tank_flange", tank_b_out, (1, 0, 0), 0.15, MATS["steel"])
+    add_flange("UPN_sales_tank_B_to_pump_suction_pump_flange", pump_suction_top, (-1, 0, 0), 0.15, MATS["steel"])
+    add_pipe_support_at("UPN_tank_to_pump_suction_support_1", (20.00, -0.05, 1.05), 0.13)
 
-    export_points = [
-        pump_discharge_mid,
-        (20.42, -1.85, 1.12),
-        (21.40, -1.85, 1.12),
-        (21.40, -2.70, 1.12),
-        (24.85, -2.70, 1.12),
-        (24.85, -4.35, 1.12),
-        (29.00, -4.35, 1.12),
-    ]
-    pipe_path("UPN_export_pumps_to_sales_oil_export", export_points, 0.16, MATS["pipe_product"])
-    for idx, p in enumerate([(22.70, -2.70, 1.12), (24.85, -3.55, 1.12), (27.20, -4.35, 1.12)], start=1):
+    # Выход с насосной станции упрощён: короткий подъём от насоса и далее
+    # прямая экспортная линия вправо, без каскада близких поворотов.
+    export_riser_top = (20.42, -1.85, 1.12)
+    export_end = (29.00, -1.85, 1.12)
+    cylinder_between("UPN_export_pump_discharge_vertical_riser", pump_discharge_mid, export_riser_top, 0.16, MATS["pipe_product"], vertices=28)
+    cylinder_between("UPN_export_pumps_to_sales_oil_export_straight", export_riser_top, export_end, 0.16, MATS["pipe_product"], vertices=28)
+    add_flange("UPN_export_pump_discharge_riser_flange", export_riser_top, (1, 0, 0), 0.18, MATS["steel"])
+    add_flange("UPN_export_boundary_flange", export_end, (1, 0, 0), 0.18, MATS["steel"])
+    for idx, p in enumerate([(22.70, -1.85, 1.12), (25.15, -1.85, 1.12), (27.40, -1.85, 1.12)], start=1):
         add_pipe_support_at(f"UPN_export_connected_support_{idx}", p, 0.16)
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
 
@@ -867,6 +1100,9 @@ def build_field():
     # Легенда
     add_box("Legend_panel", (-25, 13, 0.75), (7.0, 0.12, 1.5), MATS["building"])
     add_label("Схема месторождения:\nчёрный — нефть/эмульсия\nсиний — вода на закачку\nжёлтый — товарная нефть\nголубой прозрачный — газ", (-25, 12.7, 1.05), size=0.28)
+
+    # Baked-анимации: качалки и движущиеся стрелки потоков.
+    add_scene_animations()
 
     # Камера и свет
     bpy.ops.object.light_add(type="SUN", location=(0, -8, 20), rotation=(math.radians(45), 0, math.radians(25)))
@@ -908,3 +1144,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
