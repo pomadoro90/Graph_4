@@ -786,10 +786,15 @@ def build_field():
     # Конец магистрали теперь стыкуется с фланцем левой крышки сепаратора, а не пересекает корпус.
     pipe_path("UPSV_separator_nozzle_spool", [(1.54, 1.1, 1.10), (1.70, 1.1, 1.10)], 0.095, MATS["pipe_oil"])
     add_flange("UPSV_separator_inlet_extra_flange", (1.68, 1.1, 1.10), (-1, 0, 0), 0.13, MATS["steel"])
-    # Правая сторона УПСВ -> УПН теперь приходит прямо во входной патрубок
-    # прозрачного горизонтального аппарата. Последний поворот выполнен как
-    # часть тора, поэтому труба не обрывается у края резервуара.
-    pipe_path("UPSV_to_UPN_treater_inlet", [(5.02, 1.1, 1.10), (6.15, 1.1, 1.10), (6.15, 0.45, 1.20), (12.05, 0.45, 1.20), (12.05, 1.00, 1.20), (12.57, 1.00, 1.20)], 0.15, MATS["pipe_oil"])
+    # Правая сторона УПСВ -> УПН: проблемное тесное колено у водяного бака
+    # заменено на один читаемый диагональный вынос. Трасса сначала уходит
+    # наружу от корпуса УПСВ, затем отдельной прямой линией идёт к УПН — без
+    # наложений трубы на бак, стойки и соседние патрубки.
+    upsv_oil_outlet = (5.02, 1.1, 1.10)
+    upsv_clear_offset = (6.55, -0.55, 1.24)
+    cylinder_between("UPSV_to_UPN_treater_inlet_clear_diagonal_spool", upsv_oil_outlet, upsv_clear_offset, 0.15, MATS["pipe_oil"], vertices=28)
+    add_flange("UPSV_to_UPN_treater_inlet_diagonal_outer_flange", upsv_clear_offset, (1, -1, 0), 0.17, MATS["steel"])
+    pipe_path("UPSV_to_UPN_treater_inlet", [upsv_clear_offset, (12.05, -0.55, 1.24), (12.57, 1.00, 1.20)], 0.15, MATS["pipe_oil"])
     # Критический видимый ввод в левый торец treater: отдельный осевой spool
     # слегка входит в патрубок аппарата, поэтому на рендере нет оборванного конца.
     cylinder_between("UPN_treater_left_nozzle_visible_axis_spool", (11.88, 1.00, 1.20), (12.72, 1.00, 1.20), 0.15, MATS["pipe_oil"], vertices=28)
