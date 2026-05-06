@@ -127,6 +127,7 @@ namespace Graph4.OilField
                 Transform pitmanR = FindChildContains(searchRoot, $"Producing_well_{i}_pitman_R");
                 animator.pitmans = pitmanL != null && pitmanR != null ? new[] { pitmanL, pitmanR } : new Transform[0];
                 animator.bridleCable = FindChildContains(searchRoot, $"Producing_well_{i}_bridle_cable");
+                animator.RebindAndCacheRestPose();
             }
         }
 

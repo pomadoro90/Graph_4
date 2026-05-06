@@ -846,25 +846,30 @@ def add_pumpjack_animation(name: str, loc: Vec3, scale=0.8, start_frame=1, end_f
         frames.append(end_frame)
     for frame in frames:
         t = (frame - start_frame) / max(1, end_frame - start_frame)
-        crank_angle = crank_rest_angle + 2 * math.pi * t
+        phase = 2 * math.pi * t
+        crank_angle = crank_rest_angle + phase
         pin_yz = (crank[1] + crank_radius * math.cos(crank_angle), crank[2] + crank_radius * math.sin(crank_angle))
-        candidates = _circle_intersections((pivot[1], pivot[2]), beam_radius, pin_yz, pitman_len)
-        if candidates:
-            # Берём верхнюю сборочную ветвь и ближайшее к рабочему диапазону решение.
-            beam_attach = max(candidates, key=lambda p: p[1])
-            beam_angle = math.atan2(beam_attach[1] - pivot[2], beam_attach[0] - pivot[1])
-            beam_delta = beam_angle - beam_rest_angle
-        else:
-            beam_delta = math.radians(7.0) * math.sin(2 * math.pi * t)
-            beam_attach = _rotate_yz_about(beam_rear_rest, (pivot[1], pivot[2]), beam_delta)
+
+        # ВАЖНО: текущая декоративная геометрия качалки не является точным
+        # замкнутым четырёхзвенником на полный оборот: строгий circle-solver
+        # давал диапазон почти -24°..+5° и визуально "ломал" станок. Поэтому
+        # для обзорной сцены используем устойчивую кинематику реальной логики:
+        # оси фиксированы, кривошипы вращаются, балансир качается вокруг
+        # седла в малом рабочем диапазоне, а шатуны остаются цельными связями
+        # между пальцем кривошипа и задним концом балансира.
+        beam_delta = math.radians(7.0) * math.sin(phase + math.radians(18))
+        beam_attach = _rotate_yz_about(beam_rear_rest, (pivot[1], pivot[2]), beam_delta)
         beam_empty.rotation_euler = (beam_delta, 0, 0)
         beam_empty.keyframe_insert(data_path="rotation_euler", frame=frame)
+
         crank_delta = crank_angle - crank_rest_angle
         for empty in crank_empties:
             empty.rotation_euler = (crank_delta, 0, 0)
             empty.keyframe_insert(data_path="rotation_euler", frame=frame)
+
         for obj, top_x, bot_x, base_len in pitmans:
             _set_cylinder_between_keyframed(obj, (bot_x, pin_yz[0], pin_yz[1]), (top_x, beam_attach[0], beam_attach[1]), base_len, frame)
+
         cable_top_yz = _rotate_yz_about(cable_top_rest, (pivot[1], pivot[2]), beam_delta)
         _set_cylinder_between_keyframed(cable, cable_ground, (x, cable_top_yz[0], cable_top_yz[1]), cable_base_len, frame)
 

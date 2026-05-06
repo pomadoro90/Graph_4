@@ -49,6 +49,18 @@ namespace Graph4.OilField
 
         public void SetRunning(bool value) => running = value;
         public void SetSpeed(float value) => speed = Mathf.Clamp(value, 0.05f, 6f);
+        public void RebindAndCacheRestPose()
+        {
+            AutoBindIfNeeded();
+            CacheRestPose();
+            ResetAnimation();
+        }
+
+        public void ResetAnimation()
+        {
+            phase = 0f;
+            ApplyPose(phase);
+        }
 
         public void AutoBindIfNeeded()
         {

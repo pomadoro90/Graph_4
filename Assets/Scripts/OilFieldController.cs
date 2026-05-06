@@ -11,7 +11,10 @@ namespace Graph4.OilField
         [Header("Controls")]
         public KeyCode toggleKey = KeyCode.Space;
         public KeyCode fasterKey = KeyCode.Equals;
+        public KeyCode fasterKeyAlt = KeyCode.KeypadPlus;
         public KeyCode slowerKey = KeyCode.Minus;
+        public KeyCode slowerKeyAlt = KeyCode.KeypadMinus;
+        public KeyCode resetKey = KeyCode.R;
 
         [Header("Process state")]
         public bool isRunning;
@@ -38,19 +41,33 @@ namespace Graph4.OilField
             if (Input.GetKeyDown(toggleKey) || Input.GetMouseButtonDown(0))
                 ToggleProcess();
 
-            if (Input.GetKeyDown(fasterKey))
+            if (Input.GetKeyDown(fasterKey) || Input.GetKeyDown(fasterKeyAlt))
                 SetSpeed(flowSpeed * 1.25f);
 
-            if (Input.GetKeyDown(slowerKey))
+            if (Input.GetKeyDown(slowerKey) || Input.GetKeyDown(slowerKeyAlt))
                 SetSpeed(flowSpeed / 1.25f);
+
+            if (Input.GetKeyDown(resetKey))
+                ResetAnimations();
         }
 
         private void OnGUI()
         {
             string label = isRunning ? "Остановить анимации" : "Запустить анимации";
-            if (GUI.Button(new Rect(18, 18, 210, 42), label))
+            const float x = 18f;
+            if (GUI.Button(new Rect(x, 18, 220, 42), label))
                 ToggleProcess();
-            GUI.Label(new Rect(18, 64, 260, 24), $"Скорость: {flowSpeed:0.00}x  (+ / -)");
+            if (GUI.Button(new Rect(x, 68, 105, 34), "Медленнее"))
+                SetSpeed(flowSpeed / 1.25f);
+            if (GUI.Button(new Rect(x + 115, 68, 105, 34), "Быстрее"))
+                SetSpeed(flowSpeed * 1.25f);
+            if (GUI.Button(new Rect(x, 110, 220, 34), "Сбросить движение"))
+                ResetAnimations();
+            GUI.Box(new Rect(x, 154, 330, 92),
+                $"Управление:\n" +
+                $"Space / ЛКМ — запуск/стоп\n" +
+                $"+ / - — скорость: {flowSpeed:0.00}x\n" +
+                $"R — сброс анимаций");
         }
 
         public void ToggleProcess()
@@ -74,6 +91,27 @@ namespace Graph4.OilField
         public void SetSpeed(float newSpeed)
         {
             flowSpeed = Mathf.Clamp(newSpeed, 0.05f, 6f);
+            ApplyState();
+        }
+
+        public void ResetAnimations()
+        {
+            if (flowAnimators != null)
+            {
+                foreach (var animator in flowAnimators)
+                {
+                    if (animator == null) continue;
+                    animator.ResetAnimation();
+                }
+            }
+            if (pumpjackAnimators != null)
+            {
+                foreach (var animator in pumpjackAnimators)
+                {
+                    if (animator == null) continue;
+                    animator.ResetAnimation();
+                }
+            }
             ApplyState();
         }
 

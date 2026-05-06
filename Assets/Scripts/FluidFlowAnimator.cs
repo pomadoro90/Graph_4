@@ -15,6 +15,14 @@ namespace Graph4.OilField
         public bool loop = true;
 
         private int currentIndex;
+        private Vector3 startPosition;
+
+        private void Awake()
+        {
+            startPosition = transform.position;
+            if (waypoints != null && waypoints.Length > 0)
+                startPosition = waypoints[0].position;
+        }
 
         private void Update()
         {
@@ -50,6 +58,15 @@ namespace Graph4.OilField
         public void SetSpeed(float value)
         {
             speed = Mathf.Max(0.05f, value);
+        }
+
+        public void ResetAnimation()
+        {
+            currentIndex = 0;
+            if (waypoints != null && waypoints.Length > 0)
+                transform.position = waypoints[0].position;
+            else
+                transform.position = startPosition;
         }
     }
 }
