@@ -389,11 +389,13 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     s = scale
     # Пропорции сверены с референсом pumpjack: длинная база, A-frame ближе к
     # передней половине, балансир короче прежнего и кривошип ниже у редуктора.
-    add_box(name + "_pad", (x, y, z + 0.08 * s), (5.2 * s, 10.0 * s, 0.16 * s), MATS["concrete"], bevel=0.035 * s)
+    # Фундамент слегка утоплен в плоскость земли: на рендерах не появляется
+    # зелёная щель, из-за которой качалка выглядит висящей в воздухе.
+    add_box(name + "_pad", (x, y, z + 0.055 * s), (5.2 * s, 10.0 * s, 0.18 * s), MATS["concrete"], bevel=0.035 * s)
     # Вместо одной грубой чёрной плиты — две продольные стальные рамы/полозья
     # с поперечинами. Так на крупных планах основание читается как конструкция,
     # а не как случайный чёрный куб.
-    rail_z = z + 0.28 * s
+    rail_z = z + 0.255 * s
     for rx in (-1.05 * s, 1.05 * s):
         add_box(name + f"_skid_rail_{rx:+.2f}", (x + rx, y - 0.05 * s, rail_z), (0.30 * s, 8.7 * s, 0.28 * s), MATS["steel"], bevel=0.025 * s)
     for j, yy in enumerate((-3.75 * s, -1.65 * s, 0.45 * s, 2.55 * s, 4.00 * s), start=1):
@@ -408,7 +410,7 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
                            (-base_half_x, base_half_y, "RL"), (base_half_x, base_half_y, "RR")]:
         # Башмаки и анкера показывают, что стойки закреплены к раме/фундаменту,
         # а не просто пересекают чёрную плиту.
-        foot_z = z + 0.46 * s
+        foot_z = z + 0.435 * s
         add_box(name + "_A_frame_footplate_" + suffix, (x + bx, y + by, foot_z), (0.58 * s, 0.48 * s, 0.08 * s), MATS["orange"], bevel=0.015 * s)
         for ax in (-0.17 * s, 0.17 * s):
             for ay in (-0.13 * s, 0.13 * s):
@@ -466,8 +468,8 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     pin_z = crank_z + 0.45 * s
     add_box(name + "_gearbox", (x, crank_y, z + 0.92 * s), (1.45 * s, 1.15 * s, 0.92 * s), MATS["steel"], bevel=0.03 * s)
     add_box(name + "_motor", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.70 * s), (0.86 * s, 1.12 * s, 0.62 * s), MATS["green"], bevel=0.025 * s)
-    add_box(name + "_gearbox_mount", (x, crank_y, z + 0.45 * s), (1.75 * s, 1.35 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
-    add_box(name + "_motor_mount", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.35 * s), (1.05 * s, 1.30 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
+    add_box(name + "_gearbox_mount", (x, crank_y, z + 0.425 * s), (1.75 * s, 1.35 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
+    add_box(name + "_motor_mount", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.325 * s), (1.05 * s, 1.30 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
     add_cylinder(name + "_crankshaft", (x, crank_y, crank_z), 0.11 * s, 2.3 * s, MATS["steel"], axis="X", vertices=20)
     for side, sx in [("L", -0.95 * s), ("R", 0.95 * s)]:
         # Узел кривошипа теперь цельный: диск/ступица на валу, рычаг, секторный
@@ -756,13 +758,20 @@ def build_field():
     # Конец магистрали теперь стыкуется с фланцем левой крышки сепаратора, а не пересекает корпус.
     pipe_path("UPSV_separator_nozzle_spool", [(1.54, 1.1, 1.10), (1.70, 1.1, 1.10)], 0.095, MATS["pipe_oil"])
     add_flange("UPSV_separator_inlet_extra_flange", (1.68, 1.1, 1.10), (-1, 0, 0), 0.13, MATS["steel"])
-    pipe_path("UPSV_to_UPN_oil", [(5.02, 1.1, 1.10), (8.8, 1.1, 1.15), (8.8, 1.0, 1.15), (12.57, 1.0, 1.20)], 0.15, MATS["pipe_oil"])
+    # Правая сторона УПСВ распутана: нефтяной выход идёт коротким прямым
+    # штуцером от правого фланца сепаратора, затем уходит отдельной трассой
+    # вправо. Без лишнего близкого зигзага у корпуса.
+    pipe_path("UPSV_to_UPN_oil", [(5.02, 1.1, 1.10), (6.15, 1.1, 1.10), (6.15, 0.45, 1.24), (12.57, 0.45, 1.24)], 0.15, MATS["pipe_oil"])
+    add_flange("UPSV_oil_outlet_clear_tie_in", (5.04, 1.1, 1.10), (1, 0, 0), 0.15, MATS["steel"])
     pipe_path("UPN_tank_to_export_pumps", [(18.25, 1.2, 1.23), (18.25, -1.85, 1.05), (18.9, -1.85, 1.05)], 0.13, MATS["pipe_product"])
     pipe_path("UPN_sales_oil_export", [(19.9, -1.85, 1.0), (24.0, -1.85, 1.0), (24.0, -4.0, 1.0), (29, -4, 1.0)], 0.16, MATS["pipe_product"])
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
 
     # Вода: УПСВ/КНС -> БКНС -> нагнетательная скважина
-    pipe_path("Produced_water_UPSV_to_KNS", [(8.18, 0.9, 1.08), (8.18, 6.5, 0.95), (5.52, 12.4, 0.95)], 0.11, MATS["pipe_water"])
+    # Водяной выход вынесен отдельно от нефтяного фланца: старт от зоны бака
+    # воды УПСВ и затем плавный уход к КНС, чтобы справа от УПСВ не было клубка.
+    pipe_path("Produced_water_UPSV_to_KNS", [(8.10, 0.9, 0.92), (8.10, 2.75, 0.92), (7.25, 6.7, 0.95), (5.52, 12.4, 0.95)], 0.11, MATS["pipe_water"])
+    add_flange("UPSV_water_outlet_clear_tie_in", (8.10, 0.9, 0.92), (0, 1, 0), 0.13, MATS["steel"])
     # Усиленные видимые tie-in узлы: фланец/короткий штуцер на баке КНС и на коллекторах.
     add_flange("KNS_tank_inlet_tie_in_flange", (5.52, 12.4, 0.95), (-1, 0, 0), 0.13, MATS["steel"])
     cylinder_between("KNS_tank_inlet_short_nozzle", (5.52, 12.4, 0.95), (5.70, 12.4, 0.95), 0.075, MATS["pipe_water"], vertices=18)
@@ -776,7 +785,9 @@ def build_field():
     # ДНС теперь явно связана с верхней газовой трубой через патрубок/короткий штуцер.
     pipe_path("DNS_group_meter_top_nozzle_to_gas_header", [(-6.3, -1.9, 1.72), (-6.3, -0.9, 1.72)], 0.07, MATS["pipe_gas"])
     pipe_path("Gas_line_DNS_UPSV", [(-6.3, -0.9, 1.72), (-6.3, 2.4, 1.9), (3.3, 2.4, 1.9), (3.3, 1.1, 1.75)], 0.07, MATS["pipe_gas"])
-    pipe_path("Gas_line_UPSV_UPN", [(3.3, 1.1, 1.75), (3.3, 2.8, 1.9), (14.5, 2.8, 1.9), (14.5, 1.0, 1.9)], 0.07, MATS["pipe_gas"])
+    # Газовая линия поднята и вынесена назад отдельным верхним маршрутом,
+    # чтобы не накладываться визуально на правый нефтяной/водяной узел УПСВ.
+    pipe_path("Gas_line_UPSV_UPN", [(3.3, 1.1, 1.75), (3.3, 3.35, 2.05), (14.5, 3.35, 2.05), (14.5, 1.0, 1.9)], 0.07, MATS["pipe_gas"])
 
     # Стрелки потоков
     add_arrow("Arrow_gathering", (-9.0, -3.8, 1.15), direction="Y", material=MATS["orange"])
