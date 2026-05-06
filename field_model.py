@@ -76,6 +76,7 @@ def make_materials():
     MATS.update(
         ground=mat("Ground / tundra", (0.18, 0.27, 0.16, 1), roughness=0.9),
         gravel=mat("Gravel pads", (0.33, 0.32, 0.29, 1), roughness=0.85),
+        concrete=mat("Pumpjack concrete foundations", (0.47, 0.46, 0.42, 1), roughness=0.88),
         road=mat("Service roads", (0.10, 0.10, 0.10, 1), roughness=0.8),
         steel=mat("Dark steel", (0.08, 0.09, 0.11, 1), metallic=0.8, roughness=0.35),
         orange=mat("Safety orange", (0.95, 0.43, 0.08, 1), metallic=0.25, roughness=0.55),
@@ -98,13 +99,18 @@ def assign(obj, material):
     return obj
 
 
-def add_box(name: str, loc: Vec3, scale: Vec3, material, rot=(0, 0, 0)):
+def add_box(name: str, loc: Vec3, scale: Vec3, material, rot=(0, 0, 0), bevel=0.0):
     bpy.ops.mesh.primitive_cube_add(size=1.0, location=loc, rotation=rot)
     obj = bpy.context.active_object
     obj.name = name
     obj.dimensions = scale
     bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     assign(obj, material)
+    if bevel > 0:
+        mod = obj.modifiers.new(name="small_edge_bevel", type="BEVEL")
+        mod.width = bevel
+        mod.segments = 2
+        mod.affect = "EDGES"
     return obj
 
 
@@ -383,8 +389,15 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     s = scale
     # Пропорции сверены с референсом pumpjack: длинная база, A-frame ближе к
     # передней половине, балансир короче прежнего и кривошип ниже у редуктора.
-    add_box(name + "_pad", (x, y, z + 0.06 * s), (5.2 * s, 10.0 * s, 0.14 * s), MATS["gravel"])
-    add_box(name + "_skid", (x, y - 0.05 * s, z + 0.34 * s), (3.7 * s, 8.6 * s, 0.42 * s), MATS["steel"])
+    add_box(name + "_pad", (x, y, z + 0.08 * s), (5.2 * s, 10.0 * s, 0.16 * s), MATS["concrete"], bevel=0.035 * s)
+    # Вместо одной грубой чёрной плиты — две продольные стальные рамы/полозья
+    # с поперечинами. Так на крупных планах основание читается как конструкция,
+    # а не как случайный чёрный куб.
+    rail_z = z + 0.28 * s
+    for rx in (-1.05 * s, 1.05 * s):
+        add_box(name + f"_skid_rail_{rx:+.2f}", (x + rx, y - 0.05 * s, rail_z), (0.30 * s, 8.7 * s, 0.28 * s), MATS["steel"], bevel=0.025 * s)
+    for j, yy in enumerate((-3.75 * s, -1.65 * s, 0.45 * s, 2.55 * s, 4.00 * s), start=1):
+        add_box(name + f"_skid_crossmember_{j}", (x, y + yy, rail_z + 0.01 * s), (2.75 * s, 0.22 * s, 0.22 * s), MATS["steel"], bevel=0.02 * s)
 
     # A-frame / samson post: четыре наклонные стойки + крестовые связи.
     leg_top = Vector((x, y, z + 5.10 * s))
@@ -393,14 +406,23 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     base_half_y = 1.30 * s
     for bx, by, suffix in [(-base_half_x, -base_half_y, "FL"), (base_half_x, -base_half_y, "FR"),
                            (-base_half_x, base_half_y, "RL"), (base_half_x, base_half_y, "RR")]:
+        # Башмаки и анкера показывают, что стойки закреплены к раме/фундаменту,
+        # а не просто пересекают чёрную плиту.
+        foot_z = z + 0.46 * s
+        add_box(name + "_A_frame_footplate_" + suffix, (x + bx, y + by, foot_z), (0.58 * s, 0.48 * s, 0.08 * s), MATS["orange"], bevel=0.015 * s)
+        for ax in (-0.17 * s, 0.17 * s):
+            for ay in (-0.13 * s, 0.13 * s):
+                add_cylinder(name + f"_A_frame_anchor_{suffix}_{ax:+.2f}_{ay:+.2f}", (x + bx + ax, y + by + ay, foot_z + 0.07 * s), 0.035 * s, 0.055 * s, MATS["steel"], vertices=10)
         cylinder_between(name + "_A_frame_" + suffix, (x + bx, y + by, leg_bot_z), tuple(leg_top), 0.075 * s, MATS["steel"], vertices=12)
     for yy, label in [(-0.75 * s, "front"), (0.75 * s, "rear")]:
         cylinder_between(name + "_cross_" + label, (x - 0.95 * s, y + yy, z + 2.35 * s), (x + 0.95 * s, y + yy, z + 2.35 * s), 0.055 * s, MATS["steel"], vertices=10)
     for xx, label in [(-0.85 * s, "L"), (0.85 * s, "R")]:
         cylinder_between(name + "_cross_side_" + label, (x + xx, y - 0.82 * s, z + 2.35 * s), (x + xx, y + 0.82 * s, z + 2.35 * s), 0.055 * s, MATS["steel"], vertices=10)
 
-    add_box(name + "_saddle", (x, y, z + 5.12 * s), (1.25 * s, 1.35 * s, 0.42 * s), MATS["steel"])
+    add_box(name + "_saddle", (x, y, z + 5.12 * s), (1.25 * s, 1.35 * s, 0.42 * s), MATS["steel"], bevel=0.025 * s)
     add_cylinder(name + "_pivot", (x, y, z + 5.28 * s), 0.13 * s, 1.65 * s, MATS["steel"], axis="X", vertices=20)
+    for sx in (-0.92 * s, 0.92 * s):
+        add_cylinder(name + f"_pivot_side_bearing_{sx:+.2f}", (x + sx, y, z + 5.28 * s), 0.24 * s, 0.10 * s, MATS["orange"], axis="X", vertices=24)
 
     # H-profile walking beam: top/bottom flanges + web.
     beam_len = 8.0 * s
@@ -442,8 +464,10 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     crank_z = z + 1.45 * s
     pin_y = crank_y - 0.55 * s
     pin_z = crank_z + 0.45 * s
-    add_box(name + "_gearbox", (x, crank_y, z + 0.92 * s), (1.45 * s, 1.15 * s, 0.92 * s), MATS["steel"])
-    add_box(name + "_motor", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.70 * s), (0.86 * s, 1.12 * s, 0.62 * s), MATS["green"])
+    add_box(name + "_gearbox", (x, crank_y, z + 0.92 * s), (1.45 * s, 1.15 * s, 0.92 * s), MATS["steel"], bevel=0.03 * s)
+    add_box(name + "_motor", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.70 * s), (0.86 * s, 1.12 * s, 0.62 * s), MATS["green"], bevel=0.025 * s)
+    add_box(name + "_gearbox_mount", (x, crank_y, z + 0.45 * s), (1.75 * s, 1.35 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
+    add_box(name + "_motor_mount", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.35 * s), (1.05 * s, 1.30 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
     add_cylinder(name + "_crankshaft", (x, crank_y, crank_z), 0.11 * s, 2.3 * s, MATS["steel"], axis="X", vertices=20)
     for side, sx in [("L", -0.95 * s), ("R", 0.95 * s)]:
         # Узел кривошипа теперь цельный: диск/ступица на валу, рычаг, секторный
