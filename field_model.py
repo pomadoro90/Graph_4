@@ -154,6 +154,34 @@ def new_mesh_obj(name: str, verts, faces, material):
     return obj
 
 
+def add_annular_sector(name: str, loc: Vec3, outer_r: float, inner_r: float,
+                       thickness: float, start_deg: float, end_deg: float,
+                       material, segments=18):
+    """Экструдированный сектор кольца в плоскости YZ, толщина вдоль X.
+
+    Используется для реалистичных сегментных противовесов станка-качалки:
+    это не случайные висящие диски, а толстые болтовые грузы на кривошипах.
+    """
+    x, y, z = loc
+    a0 = math.radians(start_deg)
+    a1 = math.radians(end_deg)
+    if a1 < a0:
+        a0, a1 = a1, a0
+    pts_outer = []
+    pts_inner = []
+    for i in range(segments + 1):
+        a = a0 + (a1 - a0) * i / segments
+        pts_outer.append((outer_r * math.cos(a), outer_r * math.sin(a)))
+        pts_inner.append((inner_r * math.cos(a), inner_r * math.sin(a)))
+    loop = pts_outer + list(reversed(pts_inner))
+    verts = [(x - thickness / 2, y + yy, z + zz) for yy, zz in loop] + [(x + thickness / 2, y + yy, z + zz) for yy, zz in loop]
+    n = len(loop)
+    faces = [tuple(range(n)), tuple(range(2 * n - 1, n - 1, -1))]
+    for i in range(n):
+        faces.append((i, (i + 1) % n, (i + 1) % n + n, i + n))
+    return new_mesh_obj(name, verts, faces, material)
+
+
 def _unit(v: Vector) -> Vector:
     if v.length <= 1e-8:
         return Vector((0, 0, 0))
@@ -417,7 +445,19 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     add_cylinder(name + "_crankshaft", (x, crank_y, crank_z), 0.11 * s, 2.3 * s, MATS["steel"], axis="X", vertices=20)
     for side, sx in [("L", -0.95 * s), ("R", 0.95 * s)]:
         cylinder_between(name + "_crank_arm_" + side, (x + sx, crank_y, crank_z), (x + sx, pin_y, pin_z), 0.06 * s, MATS["orange"], vertices=10)
-        add_cylinder(name + "_counterweight_segment_" + side, (x + sx, pin_y - 0.18 * s, pin_z - 0.05 * s), 0.42 * s, 0.16 * s, MATS["orange"], axis="X", vertices=20)
+        add_cylinder(name + "_crank_pin_hub_" + side, (x + sx, pin_y, pin_z), 0.13 * s, 0.24 * s, MATS["steel"], axis="X", vertices=18)
+        add_annular_sector(name + "_counterweight_segment_" + side, (x + sx, crank_y, crank_z), 0.78 * s, 0.42 * s, 0.22 * s, 205, 318, MATS["orange"], segments=20)
+        for bolt_i, ang_deg in enumerate((222, 260, 300), start=1):
+            a = math.radians(ang_deg)
+            add_cylinder(
+                f"{name}_counterweight_bolt_{side}_{bolt_i}",
+                (x + sx, crank_y + 0.59 * s * math.cos(a), crank_z + 0.59 * s * math.sin(a)),
+                0.045 * s,
+                0.27 * s,
+                MATS["steel"],
+                axis="X",
+                vertices=12,
+            )
         cylinder_between(name + "_pitman_" + side, (x + sx, pin_y, pin_z), (x + sx * 0.45, beam_y0 + beam_len / 2 - 0.3 * s, beam_z - 0.35 * s), 0.045 * s, MATS["steel"], vertices=10)
 
     # Подвеска, полированный шток и устье строго под головой.
@@ -465,7 +505,8 @@ def add_tank(name: str, loc: Vec3, radius=1.0, height=2.0, label=""):
     add_cylinder(name + "_foundation", (x, y, base_z + 0.08), radius + 0.42, 0.16, MATS["gravel"], vertices=56)
     add_cylinder(name + "_skirt", (x, y, base_z + 0.22), radius * 1.02, 0.28, MATS["steel"], vertices=56)
     add_cylinder(name + "_wall", (x, y, base_z + 0.28 + height / 2), radius, height, MATS["tank"], vertices=56)
-    add_cone(name + "_roof", (x, y, base_z + 0.28 + height + 0.22), radius, 0.12, 0.45, MATS["tank"], vertices=56)
+    add_cylinder(name + "_roof", (x, y, base_z + 0.28 + height + 0.08), radius * 0.98, 0.16, MATS["tank"], vertices=56)
+    add_cylinder(name + "_roof_center_cap", (x, y, base_z + 0.28 + height + 0.22), radius * 0.18, 0.12, MATS["steel"], vertices=24)
     # боковые патрубки/фланцы для видимой технологической связности
     nozzle_z = base_z + 0.28 + min(1.0, height * 0.45)
     add_flange(name + "_inlet_nozzle", (x - radius - 0.08, y, nozzle_z), (-1, 0, 0), 0.14, MATS["steel"])
@@ -505,7 +546,8 @@ def add_facility_dns(loc: Vec3):
     add_horizontal_vessel("DNS_group_meter", (x - 0.3, y - 0.9, z + 1.05), 3.0, 0.48, MATS["glass"])
     add_pump_block("DNS_booster", (x + 2.35, y - 0.4, z), count=3)
     add_cylinder("DNS_flare_stack", (x + 3.6, y + 2.0, z + 2.0), 0.08, 4.0, MATS["steel"], vertices=12)
-    add_cone("DNS_flare_tip", (x + 3.6, y + 2.0, z + 4.15), 0.18, 0.04, 0.3, MATS["orange"], vertices=16)
+    add_cylinder("DNS_flare_burner_tip", (x + 3.6, y + 2.0, z + 4.17), 0.13, 0.26, MATS["orange"], vertices=16)
+    add_cylinder("DNS_flare_cap", (x + 3.6, y + 2.0, z + 4.34), 0.16, 0.05, MATS["steel"], vertices=16)
     add_label("ДНС\nдожимная насосная", (x, y - 3.8, z + 0.08), size=0.34)
 
 
@@ -544,21 +586,63 @@ def add_facility_kns(loc: Vec3):
     add_pad("KNS_pad", loc, 6.5, 4.5)
     add_tank("KNS_intake_tank", (x - 1.7, y + 0.4, z), radius=0.7, height=1.45, label="стоки")
     add_pump_block("KNS_transfer", (x + 1.2, y - 0.15, z), count=2, water=True)
+    # Внутренняя обвязка КНС: бак -> всасывающий коллектор -> напорный коллектор.
+    # Низкие участки идут на отметках насосных коллекторов, чтобы не висеть в воздухе.
+    pipe_path(
+        "KNS_intake_tank_to_suction_header",
+        [(x - 0.92, y + 0.4, z + 0.93), (x - 0.08, y + 0.4, z + 0.72), (x - 0.08, y - 0.15, z + 0.55)],
+        0.075,
+        MATS["pipe_water"],
+        elevated=True,
+    )
+    pipe_path(
+        "KNS_discharge_header_to_station_tie_in",
+        [(x + 2.32, y - 0.15, z + 0.62), (x + 2.32, y + 0.95, z + 0.82), (x + 2.32, y + 1.85, z + 0.82)],
+        0.08,
+        MATS["pipe_water"],
+        elevated=True,
+    )
     add_box("KNS_operator_box", (x + 1.2, y + 1.45, z + 0.45), (1.4, 0.8, 0.9), MATS["building"])
     add_label("КНС\nкустовая насосная", (x, y - 2.7, z + 0.08), size=0.31)
 
 
 def add_arrow(name: str, loc: Vec3, direction="X", material=None):
+    """Плоская стрелка направления потока вместо торчащего конуса.
+
+    Предыдущие 3D-конусы воспринимались как случайные цветные капли/маркеры.
+    Здесь стрелка лежит тонкой табличкой над трубой и не маскируется под фитинг.
+    """
     material = material or MATS["orange"]
     x, y, z = loc
-    if direction == "X":
-        add_cone(name, (x, y, z), 0.22, 0.0, 0.55, material, vertices=24).rotation_euler[1] = math.radians(90)
-    elif direction == "-X":
-        add_cone(name, (x, y, z), 0.22, 0.0, 0.55, material, vertices=24).rotation_euler[1] = math.radians(-90)
-    elif direction == "Y":
-        add_cone(name, (x, y, z), 0.22, 0.0, 0.55, material, vertices=24).rotation_euler[0] = math.radians(-90)
-    else:
-        add_cone(name, (x, y, z), 0.22, 0.0, 0.55, material, vertices=24).rotation_euler[0] = math.radians(90)
+    length = 0.86
+    width = 0.36
+    tail = 0.46
+    thick = 0.028
+    local = [
+        (-length / 2, -width * 0.30, 0),
+        (-length / 2 + tail, -width * 0.30, 0),
+        (-length / 2 + tail, -width / 2, 0),
+        (length / 2, 0, 0),
+        (-length / 2 + tail, width / 2, 0),
+        (-length / 2 + tail, width * 0.30, 0),
+        (-length / 2, width * 0.30, 0),
+    ]
+    yaw = {"X": 0.0, "-X": math.pi, "Y": math.pi / 2, "-Y": -math.pi / 2}.get(direction, 0.0)
+    verts_top = []
+    verts_bot = []
+    for lx, ly, _ in local:
+        rx = lx * math.cos(yaw) - ly * math.sin(yaw)
+        ry = lx * math.sin(yaw) + ly * math.cos(yaw)
+        verts_top.append((x + rx, y + ry, z + thick / 2))
+        verts_bot.append((x + rx, y + ry, z - thick / 2))
+    n = len(local)
+    verts = verts_top + verts_bot
+    faces = [tuple(range(n)), tuple(range(2 * n - 1, n - 1, -1))]
+    for i in range(n):
+        faces.append((i, (i + 1) % n, (i + 1) % n + n, i + n))
+    obj = new_mesh_obj(name, verts, faces, material)
+    add_box(name + "_stand", (x, y, z - 0.11), (0.08, 0.08, 0.22), MATS["steel"])
+    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -615,6 +699,9 @@ def build_field():
 
     # Нефтяная технологическая линия: ДНС -> УПСВ -> УПН -> экспорт
     pipe_path("DNS_to_UPSV_emulsion", [(-4.70, -1.9, 1.05), (-1.0, -1.9, 1.10), (-1.0, 1.1, 1.10), (1.62, 1.1, 1.10)], 0.15, MATS["pipe_oil"])
+    # Явная короткая обвязка проблемного узла у УПСВ: патрубок, фланец, колено и вход в аппарат.
+    pipe_path("UPSV_separator_nozzle_spool", [(1.70, 1.1, 1.10), (1.55, 1.1, 1.10), (1.55, 1.1, 1.35), (2.05, 1.1, 1.35)], 0.095, MATS["pipe_oil"])
+    add_flange("UPSV_separator_inlet_extra_flange", (1.68, 1.1, 1.10), (-1, 0, 0), 0.12, MATS["steel"])
     pipe_path("UPSV_to_UPN_oil", [(4.98, 1.1, 1.10), (8.8, 1.1, 1.15), (8.8, 1.0, 1.15), (12.57, 1.0, 1.20)], 0.15, MATS["pipe_oil"])
     pipe_path("UPN_tank_to_export_pumps", [(18.25, 1.2, 1.23), (18.25, -1.85, 1.05), (18.9, -1.85, 1.05)], 0.13, MATS["pipe_product"])
     pipe_path("UPN_sales_oil_export", [(19.9, -1.85, 1.0), (24.0, -1.85, 1.0), (24.0, -4.0, 1.0), (29, -4, 1.0)], 0.16, MATS["pipe_product"])
@@ -622,11 +709,13 @@ def build_field():
 
     # Вода: УПСВ/КНС -> БКНС -> нагнетательная скважина
     pipe_path("Produced_water_UPSV_to_KNS", [(8.18, 0.9, 1.08), (8.18, 6.5, 0.95), (5.52, 12.4, 0.95)], 0.11, MATS["pipe_water"])
-    pipe_path("KNS_to_BKNS_water", [(10.32, 11.85, 0.82), (10.32, 14.0, 0.95), (-5.18, 14.0, 0.95), (-5.18, 12.0, 0.95)], 0.12, MATS["pipe_water"])
+    pipe_path("KNS_to_BKNS_water", [(10.32, 13.85, 0.82), (10.32, 14.0, 0.95), (-5.18, 14.0, 0.95), (-5.18, 12.0, 0.95)], 0.12, MATS["pipe_water"])
     pipe_path("BKNS_to_injection_well", [(-2.78, 12.0, 1.05), (-2.78, 15.0, 1.05), (-0.20, 15.0, 1.05)], 0.13, MATS["pipe_water"])
 
     # Газовая линия и факел
-    pipe_path("Gas_line_DNS_UPSV", [(-6.3, -0.9, 1.70), (-6.3, 2.4, 1.9), (3.3, 2.4, 1.9), (3.3, 1.1, 1.75)], 0.07, MATS["pipe_gas"])
+    # ДНС теперь явно связана с верхней газовой трубой через патрубок/короткий штуцер.
+    pipe_path("DNS_group_meter_top_nozzle_to_gas_header", [(-6.3, -1.9, 1.72), (-6.3, -0.9, 1.72)], 0.07, MATS["pipe_gas"])
+    pipe_path("Gas_line_DNS_UPSV", [(-6.3, -0.9, 1.72), (-6.3, 2.4, 1.9), (3.3, 2.4, 1.9), (3.3, 1.1, 1.75)], 0.07, MATS["pipe_gas"])
     pipe_path("Gas_line_UPSV_UPN", [(3.3, 1.1, 1.75), (3.3, 2.8, 1.9), (14.5, 2.8, 1.9), (14.5, 1.0, 1.9)], 0.07, MATS["pipe_gas"])
 
     # Стрелки потоков
