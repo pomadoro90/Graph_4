@@ -131,18 +131,6 @@ def add_cylinder(name: str, loc: Vec3, radius: float, depth: float, material, ve
     return obj
 
 
-def add_joint_ball(name: str, loc: Vec3, radius: float, material, segments=24):
-    """Сферическая сварная муфта/тройник для закрытия визуальных стыков труб."""
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=segments, ring_count=max(8, segments // 2), radius=radius, location=loc)
-    obj = bpy.context.active_object
-    obj.name = name
-    assign(obj, material)
-    try:
-        bpy.ops.object.shade_smooth()
-    except Exception:
-        pass
-    return obj
-
 
 def add_cone(name: str, loc: Vec3, r1: float, r2: float, depth: float, material, vertices=32):
     bpy.ops.mesh.primitive_cone_add(vertices=vertices, radius1=r1, radius2=r2, depth=depth, location=loc)
@@ -404,27 +392,27 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     # передней половине, балансир короче прежнего и кривошип ниже у редуктора.
     # Фундамент слегка утоплен в плоскость земли: на рендерах не появляется
     # зелёная щель, из-за которой качалка выглядит висящей в воздухе.
-    add_box(name + "_pad", (x, y, z + 0.055 * s), (5.2 * s, 10.0 * s, 0.18 * s), MATS["concrete"], bevel=0.035 * s)
+    add_box(name + "_pad", (x, y, z + 0.025 * s), (5.2 * s, 10.0 * s, 0.22 * s), MATS["concrete"], bevel=0.035 * s)
     # Вместо одной грубой чёрной плиты — две продольные стальные рамы/полозья
     # с поперечинами. Так на крупных планах основание читается как конструкция,
     # а не как случайный чёрный куб.
-    rail_z = z + 0.255 * s
+    rail_z = z + 0.185 * s
     for rx in (-1.05 * s, 1.05 * s):
-        add_box(name + f"_skid_rail_{rx:+.2f}", (x + rx, y - 0.05 * s, rail_z), (0.30 * s, 8.7 * s, 0.28 * s), MATS["steel"], bevel=0.025 * s)
+        add_box(name + f"_skid_rail_{rx:+.2f}", (x + rx, y - 0.05 * s, rail_z), (0.30 * s, 8.7 * s, 0.24 * s), MATS["steel"], bevel=0.025 * s)
     for j, yy in enumerate((-3.75 * s, -1.65 * s, 0.45 * s, 2.55 * s, 4.00 * s), start=1):
         add_box(name + f"_skid_crossmember_{j}", (x, y + yy, rail_z + 0.01 * s), (2.75 * s, 0.22 * s, 0.22 * s), MATS["steel"], bevel=0.02 * s)
 
     # A-frame / samson post: четыре наклонные стойки + крестовые связи.
     leg_top = Vector((x, y, z + 5.10 * s))
-    leg_bot_z = z + 0.72 * s
+    leg_bot_z = z + 0.25 * s
     base_half_x = 1.55 * s
     base_half_y = 1.30 * s
     for bx, by, suffix in [(-base_half_x, -base_half_y, "FL"), (base_half_x, -base_half_y, "FR"),
                            (-base_half_x, base_half_y, "RL"), (base_half_x, base_half_y, "RR")]:
         # Башмаки и анкера показывают, что стойки закреплены к раме/фундаменту,
         # а не просто пересекают чёрную плиту.
-        foot_z = z + 0.435 * s
-        add_box(name + "_A_frame_footplate_" + suffix, (x + bx, y + by, foot_z), (0.58 * s, 0.48 * s, 0.08 * s), MATS["orange"], bevel=0.015 * s)
+        foot_z = z + 0.175 * s
+        add_box(name + "_A_frame_footplate_" + suffix, (x + bx, y + by, foot_z), (0.64 * s, 0.54 * s, 0.08 * s), MATS["orange"], bevel=0.015 * s)
         for ax in (-0.17 * s, 0.17 * s):
             for ay in (-0.13 * s, 0.13 * s):
                 add_cylinder(name + f"_A_frame_anchor_{suffix}_{ax:+.2f}_{ay:+.2f}", (x + bx + ax, y + by + ay, foot_z + 0.07 * s), 0.035 * s, 0.055 * s, MATS["steel"], vertices=10)
@@ -485,31 +473,22 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     add_box(name + "_motor_mount", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.325 * s), (1.05 * s, 1.30 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
     add_cylinder(name + "_crankshaft", (x, crank_y, crank_z), 0.11 * s, 2.3 * s, MATS["steel"], axis="X", vertices=20)
     for side, sx in [("L", -0.95 * s), ("R", 0.95 * s)]:
-        # Узел кривошипа теперь цельный: диск/ступица на валу, рычаг, секторный
-        # противовес и шатуны имеют общую ось. Поэтому груз не выглядит как
-        # отдельный висящий объект и масштабируется вместе со станком.
-        add_cylinder(name + "_crank_web_disk_" + side, (x + sx, crank_y, crank_z), 0.54 * s, 0.10 * s, MATS["steel"], axis="X", vertices=28)
-        add_cylinder(name + "_crank_axis_hub_" + side, (x + sx, crank_y, crank_z), 0.19 * s, 0.28 * s, MATS["steel"], axis="X", vertices=22)
-        cylinder_between(name + "_crank_arm_" + side, (x + sx, crank_y, crank_z), (x + sx, pin_y, pin_z), 0.075 * s, MATS["orange"], vertices=12)
-        for rib_i, ang_deg in enumerate((222, 262, 302), start=1):
-            a = math.radians(ang_deg)
-            cylinder_between(
-                f"{name}_counterweight_radial_web_{side}_{rib_i}",
-                (x + sx, crank_y, crank_z),
-                (x + sx, crank_y + 0.62 * s * math.cos(a), crank_z + 0.62 * s * math.sin(a)),
-                0.045 * s,
-                MATS["steel"],
-                vertices=10,
-            )
-        add_cylinder(name + "_crank_pin_hub_" + side, (x + sx, pin_y, pin_z), 0.14 * s, 0.26 * s, MATS["steel"], axis="X", vertices=18)
-        add_annular_sector(name + "_counterweight_segment_" + side, (x + sx, crank_y, crank_z), 0.70 * s, 0.45 * s, 0.26 * s, 212, 314, MATS["orange"], segments=20)
-        for bolt_i, ang_deg in enumerate((230, 263, 296), start=1):
+        # Без лишнего чёрного диска: в реальной качалке видны кривошипный вал,
+        # кривошипная щека/рычаг и груз, посаженный около пальца шатуна.
+        # Поэтому противовес перенесён к pin-узлу, где сходятся кривошип и шатун,
+        # а не висит отдельным кругом вокруг оси редуктора.
+        add_cylinder(name + "_crank_axis_hub_" + side, (x + sx, crank_y, crank_z), 0.17 * s, 0.22 * s, MATS["steel"], axis="X", vertices=20)
+        cylinder_between(name + "_crank_arm_" + side, (x + sx, crank_y, crank_z), (x + sx, pin_y, pin_z), 0.085 * s, MATS["orange"], vertices=12)
+        add_cylinder(name + "_crank_pin_hub_" + side, (x + sx, pin_y, pin_z), 0.15 * s, 0.30 * s, MATS["steel"], axis="X", vertices=18)
+        add_box(name + "_counterweight_pin_lug_" + side, (x + sx, pin_y, pin_z - 0.08 * s), (0.34 * s, 0.18 * s, 0.28 * s), MATS["orange"], bevel=0.025 * s)
+        add_annular_sector(name + "_counterweight_segment_" + side, (x + sx, pin_y, pin_z), 0.36 * s, 0.16 * s, 0.26 * s, 210, 330, MATS["orange"], segments=16)
+        for bolt_i, ang_deg in enumerate((225, 265, 305), start=1):
             a = math.radians(ang_deg)
             add_cylinder(
                 f"{name}_counterweight_bolt_{side}_{bolt_i}",
-                (x + sx, crank_y + 0.58 * s * math.cos(a), crank_z + 0.58 * s * math.sin(a)),
-                0.045 * s,
-                0.31 * s,
+                (x + sx, pin_y + 0.28 * s * math.cos(a), pin_z + 0.28 * s * math.sin(a)),
+                0.035 * s,
+                0.30 * s,
                 MATS["steel"],
                 axis="X",
                 vertices=12,
@@ -671,19 +650,17 @@ def add_facility_kns(loc: Vec3):
     add_pad("KNS_pad", loc, 6.5, 4.5)
     add_tank("KNS_intake_tank", (x - 1.7, y + 0.4, z), radius=0.7, height=1.45, label="стоки")
     add_pump_block("KNS_transfer", (x + 1.2, y - 0.15, z), count=2, water=True)
-    # Внутренняя обвязка КНС: бак -> всасывающий коллектор -> напорный коллектор.
-    # Низкие участки идут на отметках насосных коллекторов, чтобы не висеть в воздухе.
+    # Внутренняя обвязка КНС: бак -> всасывающий коллектор.
+    # Напорная линия уходит к БКНС одной общей трассой в build_field(), чтобы
+    # справа от КНС не было двух состыкованных рядом труб и лишних фланцев.
     pipe_path(
         "KNS_intake_tank_to_suction_header",
-        [(x - 0.92, y + 0.4, z + 0.93), (x - 0.08, y + 0.4, z + 0.72), (x - 0.08, y - 0.15, z + 0.55)],
+        [
+            (x - 0.92, y + 0.40, z + 0.93),
+            (x - 0.08, y + 0.40, z + 0.93),
+            (x - 0.08, y + 0.30, z + 0.55),
+        ],
         0.075,
-        MATS["pipe_water"],
-        elevated=True,
-    )
-    pipe_path(
-        "KNS_discharge_header_to_station_tie_in",
-        [(x + 2.32, y - 0.15, z + 0.62), (x + 2.32, y + 0.95, z + 0.82), (x + 2.32, y + 1.85, z + 0.82)],
-        0.08,
         MATS["pipe_water"],
         elevated=True,
     )
@@ -869,29 +846,38 @@ def build_field():
     for idx, p in enumerate([(22.70, -2.70, 1.12), (24.85, -3.55, 1.12), (27.20, -4.35, 1.12)], start=1):
         add_pipe_support_at(f"UPN_export_connected_support_{idx}", p, 0.16)
 
-    # Крупные сварные муфты/тройники закрывают все точки врезки и углы, чтобы
-    # на рендере не было открытых торцов и "висящих" коротких патрубков.
-    for idx, p in enumerate([
-        tank_a_nozzle, tank_b_nozzle,
-        suction_header_l, suction_header_r, (19.30, -0.18, 1.12),
-        suction_drop_high, suction_drop_low, suction_before_pump, pump_suction,
-        (20.42, -2.30, 0.62), (20.42, -1.40, 0.62), (20.42, -1.85, 0.62),
-        (20.42, -1.85, 1.12), (21.40, -1.85, 1.12), (21.40, -2.70, 1.12),
-        (24.85, -2.70, 1.12), (24.85, -4.35, 1.12),
+    # Кольцевые сварные муфты/фланцы закрывают точки врезки и углы без сфер:
+    # шаровые joint-объекты убраны, стыки читаются как обычные трубные кольца.
+    for idx, (p, d, rad) in enumerate([
+        (tank_a_nozzle, (0, -1, 0), 0.15),
+        (tank_b_nozzle, (0, -1, 0), 0.15),
+        (suction_header_l, (1, 0, 0), 0.145),
+        (suction_header_r, (1, 0, 0), 0.145),
+        ((19.30, -0.18, 1.12), (1, 0, 0), 0.145),
+        (suction_drop_high, (0, 0, 1), 0.145),
+        (suction_drop_low, (0, 0, 1), 0.145),
+        (suction_before_pump, (1, 0, 0), 0.145),
+        (pump_suction, (1, 0, 0), 0.145),
+        ((20.42, -2.30, 0.62), (0, 1, 0), 0.145),
+        ((20.42, -1.40, 0.62), (0, 1, 0), 0.145),
+        ((20.42, -1.85, 0.62), (0, 0, 1), 0.16),
+        ((20.42, -1.85, 1.12), (0, 0, 1), 0.18),
+        ((21.40, -1.85, 1.12), (1, 0, 0), 0.18),
+        ((21.40, -2.70, 1.12), (0, 1, 0), 0.18),
+        ((24.85, -2.70, 1.12), (1, 0, 0), 0.18),
+        ((24.85, -4.35, 1.12), (0, 1, 0), 0.18),
     ], start=1):
-        add_joint_ball(f"UPN_export_no_gap_welded_joint_{idx:02d}", p, 0.175, MATS["pipe_product"], segments=24)
+        add_flange(f"UPN_export_no_gap_welded_collar_{idx:02d}", p, d, rad, MATS["steel"])
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
 
     # Вода: УПСВ/КНС -> БКНС -> нагнетательная скважина
     # Водяной выход вынесен отдельно от нефтяного фланца: старт от зоны бака
     # воды УПСВ и затем плавный уход к КНС, чтобы справа от УПСВ не было клубка.
-    pipe_path("Produced_water_UPSV_to_KNS", [(8.10, 0.9, 0.92), (8.10, 2.75, 0.92), (7.25, 6.7, 0.95), (5.52, 12.4, 0.95)], 0.11, MATS["pipe_water"])
-    add_flange("UPSV_water_outlet_clear_tie_in", (8.10, 0.9, 0.92), (0, 1, 0), 0.13, MATS["steel"])
-    # Усиленные видимые tie-in узлы: фланец/короткий штуцер на баке КНС и на коллекторах.
-    add_flange("KNS_tank_inlet_tie_in_flange", (5.52, 12.4, 0.95), (-1, 0, 0), 0.13, MATS["steel"])
-    cylinder_between("KNS_tank_inlet_short_nozzle", (5.52, 12.4, 0.95), (5.70, 12.4, 0.95), 0.075, MATS["pipe_water"], vertices=18)
-    add_flange("KNS_discharge_external_tie_in_flange", (10.32, 13.85, 0.82), (0, 1, 0), 0.13, MATS["steel"])
-    pipe_path("KNS_to_BKNS_water", [(10.32, 13.85, 0.82), (10.32, 14.0, 0.95), (-5.18, 14.0, 0.95), (-5.18, 12.0, 0.95)], 0.12, MATS["pipe_water"])
+    pipe_path("Produced_water_UPSV_to_KNS", [(8.10, 0.9, 0.92), (8.10, 2.75, 0.95), (5.52, 2.75, 0.95), (5.52, 12.4, 0.95)], 0.11, MATS["pipe_water"])
+    # КНС -> БКНС: единая чистая трасса прямо от напорного коллектора насосов.
+    # За счёт этого справа от КНС нет отдельного внутреннего стояка, внешней
+    # трубы поверх него и дублирующих фланцев в одной точке.
+    pipe_path("KNS_to_BKNS_water", [(10.32, 12.30, 0.62), (11.35, 12.30, 0.62), (11.35, 12.30, 0.95), (11.35, 13.85, 0.95), (-5.18, 13.85, 0.95), (-5.18, 12.0, 0.95)], 0.12, MATS["pipe_water"])
     add_flange("BKNS_suction_external_tie_in_flange", (-5.18, 12.0, 0.95), (0, -1, 0), 0.13, MATS["steel"])
     pipe_path("BKNS_to_injection_well", [(-2.78, 12.0, 1.05), (-2.78, 15.0, 1.05), (-0.20, 15.0, 1.05)], 0.13, MATS["pipe_water"])
     add_flange("Injection_well_water_tie_in_flange", (-0.20, 15.0, 1.05), (1, 0, 0), 0.14, MATS["steel"])
