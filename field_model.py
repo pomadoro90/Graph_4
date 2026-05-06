@@ -475,22 +475,28 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
     add_box(name + "_motor_mount", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.325 * s), (1.05 * s, 1.30 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
     add_cylinder(name + "_crankshaft", (x, crank_y, crank_z), 0.11 * s, 2.3 * s, MATS["steel"], axis="X", vertices=20)
     for side, sx in [("L", -0.95 * s), ("R", 0.95 * s)]:
-        # Без лишнего чёрного диска: в реальной качалке видны кривошипный вал,
-        # кривошипная щека/рычаг и груз, посаженный около пальца шатуна.
-        # Поэтому противовес перенесён к pin-узлу, где сходятся кривошип и шатун,
-        # а не висит отдельным кругом вокруг оси редуктора.
+        # Кривошипный узел: противовес должен быть сектором большого кольца,
+        # центр которого совпадает с осью кривошипного вала. Палец шатуна
+        # вращается именно вокруг этой оси, поэтому нельзя центрировать дугу
+        # груза на самом пальце — тогда противовес выглядит мелким и неверно
+        # развернутым относительно качалки.
         add_cylinder(name + "_crank_axis_hub_" + side, (x + sx, crank_y, crank_z), 0.17 * s, 0.22 * s, MATS["steel"], axis="X", vertices=20)
         cylinder_between(name + "_crank_arm_" + side, (x + sx, crank_y, crank_z), (x + sx, pin_y, pin_z), 0.085 * s, MATS["orange"], vertices=12)
         add_cylinder(name + "_crank_pin_hub_" + side, (x + sx, pin_y, pin_z), 0.15 * s, 0.30 * s, MATS["steel"], axis="X", vertices=18)
         add_box(name + "_counterweight_pin_lug_" + side, (x + sx, pin_y, pin_z - 0.08 * s), (0.34 * s, 0.18 * s, 0.28 * s), MATS["orange"], bevel=0.025 * s)
-        add_annular_sector(name + "_counterweight_segment_" + side, (x + sx, pin_y, pin_z), 0.36 * s, 0.16 * s, 0.26 * s, 210, 330, MATS["orange"], segments=16)
-        for bolt_i, ang_deg in enumerate((225, 265, 305), start=1):
+
+        # Большой серповидный противовес на кривошипной щеке: его дуга
+        # построена вокруг crank_y/crank_z, а сектор расположен с нижней
+        # стороны, противоположно поднятому пальцу шатуна.
+        counterweight_angles = (205, 335)
+        add_annular_sector(name + "_counterweight_segment_" + side, (x + sx, crank_y, crank_z), 0.98 * s, 0.54 * s, 0.30 * s, *counterweight_angles, MATS["orange"], segments=24)
+        for bolt_i, ang_deg in enumerate((222, 270, 318), start=1):
             a = math.radians(ang_deg)
             add_cylinder(
                 f"{name}_counterweight_bolt_{side}_{bolt_i}",
-                (x + sx, pin_y + 0.28 * s * math.cos(a), pin_z + 0.28 * s * math.sin(a)),
-                0.035 * s,
-                0.30 * s,
+                (x + sx, crank_y + 0.76 * s * math.cos(a), crank_z + 0.76 * s * math.sin(a)),
+                0.045 * s,
+                0.32 * s,
                 MATS["steel"],
                 axis="X",
                 vertices=12,
