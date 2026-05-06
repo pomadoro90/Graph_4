@@ -763,8 +763,21 @@ def build_field():
     # вправо. Без лишнего близкого зигзага у корпуса.
     pipe_path("UPSV_to_UPN_oil", [(5.02, 1.1, 1.10), (6.15, 1.1, 1.10), (6.15, 0.45, 1.24), (12.57, 0.45, 1.24)], 0.15, MATS["pipe_oil"])
     add_flange("UPSV_oil_outlet_clear_tie_in", (5.04, 1.1, 1.10), (1, 0, 0), 0.15, MATS["steel"])
-    pipe_path("UPN_tank_to_export_pumps", [(18.25, 1.2, 1.23), (18.25, -1.85, 1.05), (18.9, -1.85, 1.05)], 0.13, MATS["pipe_product"])
-    pipe_path("UPN_sales_oil_export", [(19.9, -1.85, 1.0), (24.0, -1.85, 1.0), (24.0, -4.0, 1.0), (29, -4, 1.0)], 0.16, MATS["pipe_product"])
+    # Обвязка УПН / экспорта: прежняя трасса давала визуальный "клубок" у
+    # правого большого колена — всасывающая линия от резервуаров и напорный
+    # экспортный коллектор шли почти в одной плоскости, а фланцы попадали прямо
+    # в зону поворотов. Ниже линии разведены по Y/Z и подключены короткими
+    # прямыми штуцерами к резервуарам/насосам.
+    cylinder_between("UPN_sales_tank_A_product_nozzle", (17.95, 1.2, 1.23), (18.45, 1.2, 1.23), 0.105, MATS["pipe_product"], vertices=20)
+    cylinder_between("UPN_sales_tank_B_product_nozzle", (20.15, 1.2, 1.23), (20.65, 1.2, 1.23), 0.105, MATS["pipe_product"], vertices=20)
+    add_flange("UPN_tank_A_outlet_flange", (18.45, 1.2, 1.23), (1, 0, 0), 0.135, MATS["steel"])
+    add_flange("UPN_tank_B_outlet_flange", (20.65, 1.2, 1.23), (1, 0, 0), 0.135, MATS["steel"])
+    pipe_path("UPN_tanks_suction_header", [(18.45, 1.2, 1.23), (18.45, 0.25, 1.23), (20.65, 0.25, 1.23), (20.65, 1.2, 1.23)], 0.115, MATS["pipe_product"])
+    pipe_path("UPN_tank_to_export_pumps", [(19.55, 0.25, 1.23), (19.55, -0.95, 1.23), (18.92, -0.95, 1.06), (18.92, -1.85, 1.06)], 0.13, MATS["pipe_product"])
+    add_flange("UPN_export_pumps_suction_tie_in", (18.92, -1.85, 1.06), (0, -1, 0), 0.14, MATS["steel"])
+
+    cylinder_between("UPN_export_pumps_discharge_spool", (19.82, -1.85, 1.14), (20.28, -1.85, 1.14), 0.12, MATS["pipe_product"], vertices=22)
+    pipe_path("UPN_sales_oil_export", [(20.28, -1.85, 1.14), (21.20, -1.85, 1.14), (21.20, -2.65, 1.14), (24.80, -2.65, 1.14), (24.80, -4.35, 1.14), (29.0, -4.35, 1.14)], 0.16, MATS["pipe_product"])
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
 
     # Вода: УПСВ/КНС -> БКНС -> нагнетательная скважина
