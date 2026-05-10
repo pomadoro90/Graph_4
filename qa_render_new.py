@@ -31,7 +31,7 @@ def render_cam(name, loc, rot, ortho=False, ortho_scale=50):
 
 render_cam("01_overview_iso", (80, -80, 60), (1.1, 0, 0.785))
 render_cam("02_top_plan", (0, 0, 120), (0, 0, 0), ortho=True, ortho_scale=100)
-render_cam("03_pumpjack_closeup", (-15, -12, 10), (1.0, 0, 0.5))
+render_cam("03_pumpjack_closeup", (-14, -16, 4), (1.25, 0, 0.85))
 render_cam("04_UPN_pipes", (-25, -15, 20), (1.0, 0, -0.3))
 render_cam("05_wellhead_nodes", (25, 10, 8), (1.0, 0, 2.2))
 render_cam("06_side_east", (120, 0, 25), (1.57, 0, 1.57), ortho=True, ortho_scale=80)

@@ -459,13 +459,21 @@ def add_pumpjack(name: str, loc: Vec3, scale=0.8):
         v = r_seg * math.sin(t)
         arc.append((head_y_chord - u, chord_mid + v))
     sil = [(head_y_beam, head_top), (head_y_beam, beam_z - 0.35 * s)] + arc
-    verts = [(-0.28 * s, yy, zz) for yy, zz in sil] + [(0.28 * s, yy, zz) for yy, zz in sil]  # NEW: thicker horsehead
+    hh_thick = 0.55 * s  # thicker for visibility from side angles
+    verts = [(-hh_thick / 2, yy, zz) for yy, zz in sil] + [(hh_thick / 2, yy, zz) for yy, zz in sil]
     verts = [(vx + x, vy, vz) for vx, vy, vz in verts]
     n = len(sil)
     faces = [tuple(range(n)), tuple(range(2 * n - 1, n - 1, -1))]
     for i in range(n):
         faces.append((i, (i + 1) % n, (i + 1) % n + n, i + n))
     new_mesh_obj(name + "_horse_head_curved", verts, faces, MATS["steel"])
+
+    # Боковые пластины horsehead — чтобы не выглядел плоским листом
+    for side_sign, side_name in [(-1, "L"), (1, "R")]:
+        sx = x + side_sign * hh_thick / 2
+        plate_verts = [(sx, yy, zz) for yy, zz in sil]
+        plate_faces = [tuple(range(len(sil)))]
+        new_mesh_obj(f"{name}_horse_head_plate_{side_name}", plate_verts, plate_faces, MATS["steel"])
 
     # Кривошипно-шатунный механизм и противовесы-сегменты.
     crank_y = y + 3.10 * s
