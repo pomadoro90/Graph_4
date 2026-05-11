@@ -385,143 +385,103 @@ def add_valve_tree(name: str, loc: Vec3, scale=1.0, injection=False):
 
 
 def add_pumpjack(name: str, loc: Vec3, scale=0.8):
-    """Станок-качалка, приближенный к референсу pump_script.py.
+    """Станок-качалка — единая цельная машина, а не набор разрозненных деталей.
 
-    Вместо условного конуса используется А-рама, H-балансир, настоящая
-    профильная "лошадиная голова" с дугой, кривошипы, сегментные
-    противовесы, шатуны и шток к устью скважины.
+    Упрощён до ~10 сплошных компонентов: фундамент, стойки, балка, голова,
+    редуктор, противовесы, подвеска, устье. Без мелкого крепежа и отдельных
+    пластин — чтобы на рендере качалка читалась как собранная установка.
     """
     x, y, z = loc
     s = scale
-    # Пропорции сверены с референсом pumpjack: длинная база, A-frame ближе к
-    # передней половине, балансир короче прежнего и кривошип ниже у редуктора.
-    # Фундамент слегка утоплен в плоскость земли: на рендерах не появляется
-    # зелёная щель, из-за которой качалка выглядит висящей в воздухе.
-    add_box(name + "_pad", (x, y, z + 0.025 * s), (5.2 * s, 10.0 * s, 0.22 * s), MATS["concrete"], bevel=0.035 * s)
-    # Вместо одной грубой чёрной плиты — две продольные стальные рамы/полозья
-    # с поперечинами. Так на крупных планах основание читается как конструкция,
-    # а не как случайный чёрный куб.
-    rail_z = z + 0.185 * s
-    for rx in (-1.05 * s, 1.05 * s):
-        add_box(name + f"_skid_rail_{rx:+.2f}", (x + rx, y - 0.05 * s, rail_z), (0.30 * s, 8.7 * s, 0.24 * s), MATS["steel"], bevel=0.025 * s)
-    for j, yy in enumerate((-3.75 * s, -1.65 * s, 0.45 * s, 2.55 * s, 4.00 * s), start=1):
-        add_box(name + f"_skid_crossmember_{j}", (x, y + yy, rail_z + 0.01 * s), (2.75 * s, 0.22 * s, 0.22 * s), MATS["steel"], bevel=0.02 * s)
 
-    # A-frame / samson post: четыре наклонные стойки + крестовые связи.
-    leg_top = Vector((x, y, z + 5.10 * s))
-    leg_bot_z = z + 0.25 * s
-    base_half_x = 1.55 * s
-    base_half_y = 1.30 * s
-    for bx, by, suffix in [(-base_half_x, -base_half_y, "FL"), (base_half_x, -base_half_y, "FR"),
-                           (-base_half_x, base_half_y, "RL"), (base_half_x, base_half_y, "RR")]:
-        # Башмаки и анкера показывают, что стойки закреплены к раме/фундаменту,
-        # а не просто пересекают чёрную плиту.
-        foot_z = z + 0.175 * s
-        add_box(name + "_A_frame_footplate_" + suffix, (x + bx, y + by, foot_z), (0.64 * s, 0.54 * s, 0.08 * s), MATS["orange"], bevel=0.015 * s)
-        for ax in (-0.17 * s, 0.17 * s):
-            for ay in (-0.13 * s, 0.13 * s):
-                add_cylinder(name + f"_A_frame_anchor_{suffix}_{ax:+.2f}_{ay:+.2f}", (x + bx + ax, y + by + ay, foot_z + 0.07 * s), 0.035 * s, 0.055 * s, MATS["steel"], vertices=10)
-        cylinder_between(name + "_A_frame_" + suffix, (x + bx, y + by, leg_bot_z), tuple(leg_top), 0.11 * s, MATS["steel"], vertices=16)  # NEW: thicker legs
-    for yy, label in [(-0.75 * s, "front"), (0.75 * s, "rear")]:
-        cylinder_between(name + "_cross_" + label, (x - 0.95 * s, y + yy, z + 2.35 * s), (x + 0.95 * s, y + yy, z + 2.35 * s), 0.055 * s, MATS["steel"], vertices=10)
-    for xx, label in [(-0.85 * s, "L"), (0.85 * s, "R")]:
-        cylinder_between(name + "_cross_side_" + label, (x + xx, y - 0.82 * s, z + 2.35 * s), (x + xx, y + 0.82 * s, z + 2.35 * s), 0.055 * s, MATS["steel"], vertices=10)
+    # 1. Фундамент — сплошная монолитная плита, слегка утопленная.
+    add_box(name + "_pad", (x, y, z + 0.015 * s), (5.0 * s, 9.5 * s, 0.20 * s), MATS["concrete"], bevel=0.03 * s)
 
-    add_box(name + "_saddle", (x, y, z + 5.12 * s), (1.25 * s, 1.35 * s, 0.42 * s), MATS["steel"], bevel=0.025 * s)
-    add_cylinder(name + "_pivot", (x, y, z + 5.28 * s), 0.13 * s, 1.65 * s, MATS["steel"], axis="X", vertices=20)
-    for sx in (-0.92 * s, 0.92 * s):
-        add_cylinder(name + f"_pivot_side_bearing_{sx:+.2f}", (x + sx, y, z + 5.28 * s), 0.24 * s, 0.10 * s, MATS["orange"], axis="X", vertices=24)
+    # 2. Основание/рамная часть — сплошной тёмный параллелепипед на плите.
+    add_box(name + "_skid", (x, y - 0.15 * s, z + 0.28 * s), (3.4 * s, 7.8 * s, 0.28 * s), MATS["steel"], bevel=0.02 * s)
 
-    # H-profile walking beam: top/bottom flanges + web.
-    beam_len = 10.0 * s  # NEW: longer beam for realistic proportions
-    beam_y0 = y - 0.80 * s
-    beam_z = z + 5.55 * s
-    add_box(name + "_beam_top_flange", (x, beam_y0, beam_z + 0.29 * s), (0.70 * s, beam_len, 0.12 * s), MATS["steel"])
-    add_box(name + "_beam_bottom_flange", (x, beam_y0, beam_z - 0.29 * s), (0.70 * s, beam_len, 0.12 * s), MATS["steel"])
-    add_box(name + "_beam_web", (x, beam_y0, beam_z), (0.14 * s, beam_len, 0.46 * s), MATS["steel"])
+    # 3. A-frame — четыре толстые стойки как единая пирамида из 4 цилиндров.
+    leg_top_z = z + 5.15 * s
+    leg_bot_z = z + 0.50 * s
+    half_x, half_y = 1.45 * s, 1.25 * s
+    for bx, by, suffix in [(-half_x, -half_y, "FL"), (half_x, -half_y, "FR"),
+                           (-half_x, half_y, "RL"), (half_x, half_y, "RR")]:
+        cylinder_between(name + "_leg_" + suffix, (x + bx, y + by, leg_bot_z), (x, y, leg_top_z), 0.14 * s, MATS["steel"], vertices=14)
+    # Диагонали крестовые — толстые стержни, читаются как жёсткость рамы.
+    for y_off in (-0.60 * s, 0.60 * s):
+        cylinder_between(name + "_cross_y" + str(int(abs(y_off))), (x - 0.85 * s, y + y_off, z + 2.55 * s), (x + 0.85 * s, y + y_off, z + 2.55 * s), 0.08 * s, MATS["steel"], vertices=10)
+    for x_off in (-0.75 * s, 0.75 * s):
+        cylinder_between(name + "_cross_x" + str(int(abs(x_off))), (x + x_off, y - 0.65 * s, z + 2.55 * s), (x + x_off, y + 0.65 * s, z + 2.55 * s), 0.08 * s, MATS["steel"], vertices=10)
 
-    # Голова балансира: экструдированная YZ-силуэтная деталь с дугой.
+    # 4. Седло и ось — толстая коробка + ось через неё.
+    add_box(name + "_saddle", (x, y, leg_top_z + 0.08 * s), (1.35 * s, 1.50 * s, 0.42 * s), MATS["steel"], bevel=0.02 * s)
+    add_cylinder(name + "_pivot_pin", (x, y, leg_top_z + 0.22 * s), 0.16 * s, 1.85 * s, MATS["steel"], axis="X", vertices=18)
+
+    # 5. Балка — одна сплошная коробка вместо 3 частей H-профиля.
+    beam_len = 9.5 * s
+    beam_y0 = y - 0.85 * s
+    beam_z = leg_top_z + 0.38 * s
+    add_box(name + "_beam", (x, beam_y0, beam_z), (0.75 * s, beam_len, 0.52 * s), MATS["steel"])
+
+    # 6. Лошадиная голова — утолщённая двусторонняя кривая деталь.
     head_y_beam = beam_y0 - beam_len / 2
-    head_y_chord = head_y_beam - 1.6 * s  # NEW: much deeper head
-    head_top = beam_z + 0.80 * s
-    head_chord_bot = beam_z - 1.20 * s
-    chord_half = (head_top - head_chord_bot) / 2
-    chord_mid = (head_top + head_chord_bot) / 2
-    sagitta = 1.2 * s  # NEW: stronger curve
+    head_y_tip = head_y_beam - 1.5 * s
+    head_top = beam_z + 0.75 * s
+    head_bot = beam_z - 1.05 * s
+    chord_half = (head_top - head_bot) / 2
+    chord_mid = (head_top + head_bot) / 2
+    sagitta = 1.15 * s
     uc = (sagitta * sagitta - chord_half * chord_half) / (2 * sagitta)
     r_seg = sagitta - uc
     theta_bot = math.atan2(-chord_half, -uc)
     theta_top = -theta_bot
     arc = []
-    for k in range(14):
-        t = theta_bot + (theta_top - theta_bot) * k / 13
+    for k in range(12):
+        t = theta_bot + (theta_top - theta_bot) * k / 11
         u = uc + r_seg * math.cos(t)
         v = r_seg * math.sin(t)
-        arc.append((head_y_chord - u, chord_mid + v))
-    sil = [(head_y_beam, head_top), (head_y_beam, beam_z - 0.35 * s)] + arc
-    hh_thick = 0.55 * s  # thicker for visibility from side angles
+        arc.append((head_y_tip - u, chord_mid + v))
+    sil = [(head_y_beam, head_top), (head_y_beam, beam_z - 0.30 * s)] + arc
+    # Двусторонняя экструзия: левая сторона и правая сторона одной толщины.
+    hh_thick = 0.65 * s
     verts = [(-hh_thick / 2, yy, zz) for yy, zz in sil] + [(hh_thick / 2, yy, zz) for yy, zz in sil]
     verts = [(vx + x, vy, vz) for vx, vy, vz in verts]
     n = len(sil)
     faces = [tuple(range(n)), tuple(range(2 * n - 1, n - 1, -1))]
     for i in range(n):
         faces.append((i, (i + 1) % n, (i + 1) % n + n, i + n))
-    new_mesh_obj(name + "_horse_head_curved", verts, faces, MATS["steel"])
+    new_mesh_obj(name + "_horse_head", verts, faces, MATS["steel"])
 
-    # Боковые пластины horsehead — чтобы не выглядел плоским листом
-    for side_sign, side_name in [(-1, "L"), (1, "R")]:
-        sx = x + side_sign * hh_thick / 2
-        plate_verts = [(sx, yy, zz) for yy, zz in sil]
-        plate_faces = [tuple(range(len(sil)))]
-        new_mesh_obj(f"{name}_horse_head_plate_{side_name}", plate_verts, plate_faces, MATS["steel"])
+    # 7. Редуктор + мотор — сплошные блоки на раме, единый цвет.
+    crank_y = y + 2.95 * s
+    crank_z = z + 1.35 * s
+    add_box(name + "_gearbox", (x, crank_y, z + 0.88 * s), (1.55 * s, 1.25 * s, 0.88 * s), MATS["steel"], bevel=0.025 * s)
+    add_box(name + "_motor", (x + 1.25 * s, crank_y + 1.20 * s, z + 0.65 * s), (0.80 * s, 1.05 * s, 0.58 * s), MATS["steel"], bevel=0.02 * s)
+    # Монтажная рама под редуктор — сплошная плита.
+    add_box(name + "_gearbox_base", (x, crank_y, z + 0.38 * s), (1.90 * s, 1.50 * s, 0.12 * s), MATS["steel"])
+    add_box(name + "_motor_base", (x + 1.25 * s, crank_y + 1.20 * s, z + 0.30 * s), (1.10 * s, 1.25 * s, 0.10 * s), MATS["steel"])
 
-    # Кривошипно-шатунный механизм и противовесы-сегменты.
-    crank_y = y + 3.10 * s
-    crank_z = z + 1.45 * s
-    pin_y = crank_y - 0.55 * s
-    pin_z = crank_z + 0.45 * s
-    add_box(name + "_gearbox", (x, crank_y, z + 0.92 * s), (1.45 * s, 1.15 * s, 0.92 * s), MATS["steel"], bevel=0.03 * s)
-    add_box(name + "_motor", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.70 * s), (0.86 * s, 1.12 * s, 0.62 * s), MATS["green"], bevel=0.025 * s)
-    add_box(name + "_gearbox_mount", (x, crank_y, z + 0.425 * s), (1.75 * s, 1.35 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
-    add_box(name + "_motor_mount", (x + 1.38 * s, crank_y + 1.35 * s, z + 0.325 * s), (1.05 * s, 1.30 * s, 0.10 * s), MATS["orange"], bevel=0.015 * s)
-    add_cylinder(name + "_crankshaft", (x, crank_y, crank_z), 0.11 * s, 2.3 * s, MATS["steel"], axis="X", vertices=20)
-    for side, sx in [("L", -0.95 * s), ("R", 0.95 * s)]:
-        # Кривошипный узел: противовес должен быть сектором большого кольца,
-        # центр которого совпадает с осью кривошипного вала. Палец шатуна
-        # вращается именно вокруг этой оси, поэтому нельзя центрировать дугу
-        # груза на самом пальце — тогда противовес выглядит мелким и неверно
-        # развернутым относительно качалки.
-        add_cylinder(name + "_crank_axis_hub_" + side, (x + sx, crank_y, crank_z), 0.17 * s, 0.22 * s, MATS["steel"], axis="X", vertices=20)
-        cylinder_between(name + "_crank_arm_" + side, (x + sx, crank_y, crank_z), (x + sx, pin_y, pin_z), 0.085 * s, MATS["orange"], vertices=12)
-        add_cylinder(name + "_crank_pin_hub_" + side, (x + sx, pin_y, pin_z), 0.15 * s, 0.30 * s, MATS["steel"], axis="X", vertices=18)
-        add_box(name + "_counterweight_pin_lug_" + side, (x + sx, pin_y, pin_z - 0.08 * s), (0.34 * s, 0.18 * s, 0.28 * s), MATS["orange"], bevel=0.025 * s)
+    # 8. Кривошип и противовес — один цельный вал + 2 сектора.
+    pin_y = crank_y - 0.50 * s
+    pin_z = crank_z + 0.40 * s
+    add_cylinder(name + "_crankshaft", (x, crank_y, crank_z), 0.13 * s, 2.2 * s, MATS["steel"], axis="X", vertices=18)
+    for side, sx in [("L", -0.90 * s), ("R", 0.90 * s)]:
+        # Кривошипная щека — толстый цилиндр на валу.
+        add_cylinder(name + "_crank_hub_" + side, (x + sx, crank_y, crank_z), 0.20 * s, 0.28 * s, MATS["steel"], axis="X", vertices=18)
+        # Жирный кривошипный рычаг.
+        cylinder_between(name + "_crank_arm_" + side, (x + sx, crank_y, crank_z), (x + sx, pin_y, pin_z), 0.095 * s, MATS["steel"], vertices=12)
+        # Крупный противовес-сектор на оси кривошипа.
+        add_annular_sector(name + "_counterweight_" + side, (x + sx, crank_y, crank_z), 1.45 * s, 0.75 * s, 0.42 * s, 70, 230, MATS["orange"], segments=28)
+        # Шатун.
+        cylinder_between(name + "_pitman_" + side, (x + sx, pin_y, pin_z), (x + sx * 0.40, beam_y0 + beam_len / 2 - 0.25 * s, beam_z - 0.32 * s), 0.05 * s, MATS["steel"], vertices=10)
 
-        # Большой серповидный противовес на кривошипной щеке: его дуга
-        # построена вокруг crank_y/crank_z. Сектор развёрнут к пальцу шатуна
-        # и вертикальным связующим звеньям, чтобы груз визуально крепился
-        # в той же рабочей зоне, а не висел снизу под редуктором.
-        counterweight_angles = (65, 235)  # NEW: wider visible sector
-        add_annular_sector(name + "_counterweight_segment_" + side, (x + sx, crank_y, crank_z), 1.55 * s, 0.85 * s, 0.45 * s, *counterweight_angles, MATS["orange"], segments=32)  # NEW: massive counterweight
-        for bolt_i, ang_deg in enumerate((102, 142, 182), start=1):
-            a = math.radians(ang_deg)
-            add_cylinder(
-                f"{name}_counterweight_bolt_{side}_{bolt_i}",
-                (x + sx, crank_y + 0.76 * s * math.cos(a), crank_z + 0.76 * s * math.sin(a)),
-                0.045 * s,
-                0.32 * s,
-                MATS["steel"],
-                axis="X",
-                vertices=12,
-            )
-        cylinder_between(name + "_pitman_" + side, (x + sx, pin_y, pin_z), (x + sx * 0.45, beam_y0 + beam_len / 2 - 0.3 * s, beam_z - 0.35 * s), 0.045 * s, MATS["steel"], vertices=10)
-
-    # Подвеска, полированный шток и устье строго под головой.
-    cable_y = head_y_chord
-    cable_top_z = head_chord_bot
-    cable_bot_z = z + 0.9 * s
-    cylinder_between(name + "_bridle_cable", (x, cable_y, cable_bot_z), (x, cable_y, cable_top_z), 0.035 * s, MATS["steel"], vertices=10)
-    add_box(name + "_carrier_bar", (x, cable_y, cable_bot_z), (0.8 * s, 0.10 * s, 0.08 * s), MATS["steel"])
-    add_valve_tree(name + "_wellhead", (x, cable_y, z), scale=1.1 * s)  # NEW: bigger wellhead
+    # 9. Подвеска и устье.
+    cable_y = head_y_tip
+    cable_top_z = head_bot + 0.25 * s
+    cable_bot_z = z + 0.85 * s
+    cylinder_between(name + "_bridle", (x, cable_y, cable_bot_z), (x, cable_y, cable_top_z), 0.04 * s, MATS["steel"], vertices=10)
+    add_box(name + "_carrier", (x, cable_y, cable_bot_z), (0.75 * s, 0.12 * s, 0.08 * s), MATS["steel"])
+    add_valve_tree(name + "_wellhead", (x, cable_y, z), scale=1.0 * s)
 
 
 
