@@ -1,0 +1,18 @@
+# Blender backups
+*.blend1
+*.blend2
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Temporary scripts
+list_objects.py
+list_upsv.py
+screenshot_fix.py
+screenshot_closeup.py
+screenshot_v2.py
+screenshot_10.py
+*_sm.png
+!screenshots_closeup/*_sm.png
+*_sm.jpg

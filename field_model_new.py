@@ -72,6 +72,24 @@ def mat(name: str, rgba: Tuple[float, float, float, float], metallic=0.0, roughn
 MATS = {}
 
 
+# ---------------------------------------------------------------------------
+# Спецификация трубопроводов — унифицированные Ду
+# ---------------------------------------------------------------------------
+
+PIPE_SPEC = {
+    "dn50":   {"radius": 0.055, "mat": "pipe_oil",    "vertices": 14},
+    "dn80":   {"radius": 0.075, "mat": "pipe_oil",    "vertices": 18},
+    "dn100":  {"radius": 0.095, "mat": "pipe_product","vertices": 24},
+    "dn125":  {"radius": 0.105, "mat": "pipe_product","vertices": 24},
+    "dn150":  {"radius": 0.120, "mat": "pipe_product","vertices": 26},
+    "dn200":  {"radius": 0.150, "mat": "pipe_product","vertices": 28},
+    "dn250":  {"radius": 0.180, "mat": "pipe_product","vertices": 32},
+}
+
+FLANGE_SCALE = 1.38
+SUPPORT_MIN_Z = 0.42
+
+
 def make_materials():
     MATS.update(
         ground=mat("Ground / tundra", (0.18, 0.27, 0.16, 1), roughness=0.9),
@@ -235,20 +253,34 @@ def add_quarter_torus_elbow(name: str, corner: Vec3, prev_pt: Vec3, next_pt: Vec
     return new_mesh_obj(name, verts, faces, material)
 
 
-def add_flange(name: str, loc: Vec3, direction: Vec3, radius: float, material):
+def add_flange(name: str, loc: Vec3, direction: Vec3, pipe_radius: float, material):
+    """Плоская фланцевая шайба на конце трубы.
+
+    Фланцевый диаметр автоматически вычисляется как pipe_radius * FLANGE_SCALE.
+    """
+    flange_r = pipe_radius * FLANGE_SCALE
     d = _unit(Vector(direction))
     if d.length == 0:
         return None
-    # Плоская фланцевая шайба, а не шар/капсула: малая толщина вдоль трубы.
-    return cylinder_between(name, tuple(Vector(loc) - d * radius * 0.16), tuple(Vector(loc) + d * radius * 0.16), radius * 1.38, material, vertices=32)
+    half_thick = flange_r * 0.12  # толщина пропорциональна фланцу
+    return cylinder_between(
+        name,
+        tuple(Vector(loc) - d * half_thick),
+        tuple(Vector(loc) + d * half_thick),
+        flange_r,
+        material,
+        vertices=32,
+    )
 
 
-def add_pipe_support_at(name: str, p: Vec3, radius: float):
+def add_pipe_support_at(name: str, p: Vec3, pipe_radius: float):
+    """H-поддержка под трубой с прижимной скобой."""
     x, y, z = p
-    if z <= 0.42:
+    if z <= SUPPORT_MIN_Z:
         return
-    add_h_support(name, x, y, max(0.20, z - radius - 0.05))
-    add_box(name + "_clamp", (x, y, z - radius * 0.15), (radius * 2.8, radius * 1.1, radius * 0.35), MATS["orange"])
+    top_z = max(0.20, z - pipe_radius - 0.05)
+    add_h_support(name, x, y, top_z)
+    add_box(name + "_clamp", (x, y, z - pipe_radius * 0.15), (pipe_radius * 2.8, pipe_radius * 1.1, pipe_radius * 0.35), MATS["orange"])
 
 
 def cylinder_between(name: str, p1: Vec3, p2: Vec3, radius: float, material, vertices=24):
@@ -321,8 +353,50 @@ def pipe_path(name: str, points: Iterable[Vec3], radius: float, material, elevat
             add_flange(f"{name}_coupling_{i:02d}", tuple(pts[i]), tuple(d), radius, MATS["steel"])
 
     # Видимые фланцы на начальном и конечном подключении к оборудованию.
-    add_flange(f"{name}_start_flange", tuple(pts[0]), tuple(pts[1] - pts[0]), radius, MATS["steel"])
-    add_flange(f"{name}_end_flange", tuple(pts[-1]), tuple(pts[-1] - pts[-2]), radius, MATS["steel"])
+    add_flange(f"{name}_start_flange", tuple(pts[0]), tuple(pts[1] - pts[0]), radius, material)
+    add_flange(f"{name}_end_flange", tuple(pts[-1]), tuple(pts[-1] - pts[-2]), radius, material)
+
+
+# ---------------------------------------------------------------------------
+# Универсальные трубные API (на базе PIPE_SPEC)
+# ---------------------------------------------------------------------------
+
+
+def pipe_path_by_spec(name: str, points: Iterable[Vec3], spec_key: str, elevated=True):
+    """Связная трасса трубы по спецификации Ду (PIPE_SPEC)."""
+    spec = PIPE_SPEC.get(spec_key)
+    if spec is None:
+        raise KeyError(f"Unknown spec_key: {spec_key} (available: {list(PIPE_SPEC.keys())})")
+    pipe_path(name, points, spec["radius"], MATS[spec["mat"]], elevated=elevated)
+
+
+def add_pipe_spool(name: str, p1: Vec3, p2: Vec3, spec_key: str,
+                   with_flanges=True, with_support=True):
+    """Цилиндр-спул с фланцами и (опционально) поддержкой.
+
+    Заменяет пару cylinder_between + add_flange в inline-узлах.
+    """
+    spec = PIPE_SPEC.get(spec_key)
+    if spec is None:
+        raise KeyError(f"Unknown spec_key: {spec_key}")
+    radius = spec["radius"]
+    material = MATS[spec["mat"]]
+    cylinders = cylinder_between(
+        name + "_spool", p1, p2, radius, material,
+        vertices=spec.get("vertices", 24),
+    )
+    if cylinders is None:
+        return
+    if with_flanges:
+        direction = Vector(p2) - Vector(p1)
+        if direction.length > 0:
+            add_flange(name + "_flange_p1", p1, tuple(direction), radius, material)
+            add_flange(name + "_flange_p2", p2, tuple(direction), radius, material)
+    if with_support:
+        span = Vector(p2) - Vector(p1)
+        if span.length > 3.8:
+            mid = (Vector(p1) + Vector(p2)) / 2
+            add_pipe_support_at(name + "_support", tuple(mid), radius)
 
 
 # ---------------------------------------------------------------------------
@@ -508,8 +582,9 @@ def add_horizontal_vessel(name: str, loc: Vec3, length: float, radius: float, ma
         add_box(name + f"_saddle_{sx}", (sx_abs, y, saddle_h / 2), (0.36, radius * 1.75, saddle_h), MATS["steel"])
         add_box(name + f"_saddle_cap_{sx}", (sx_abs, y, z - radius + 0.035), (0.52, radius * 1.95, 0.07), MATS["orange"])
     # патрубки аппарата: вход/выход + верхний газоотвод, чтобы трубы имели куда подключаться
-    add_flange(name + "_left_nozzle", (x - length / 2 - 0.08, y, z), (-1, 0, 0), 0.13, MATS["steel"])
-    add_flange(name + "_right_nozzle", (x + length / 2 + 0.08, y, z), (1, 0, 0), 0.13, MATS["steel"])
+    nozzle_r = 0.13  # соответствует DN250-ish
+    add_flange(name + "_left_nozzle", (x - length / 2 - 0.08, y, z), (-1, 0, 0), nozzle_r, MATS["steel"])
+    add_flange(name + "_right_nozzle", (x + length / 2 + 0.08, y, z), (1, 0, 0), nozzle_r, MATS["steel"])
     add_cylinder(name + "_gas_nozzle", (x, y, z + radius + 0.18), 0.08, 0.36, MATS["steel"], vertices=16)
 
 
@@ -525,17 +600,17 @@ def add_tank(name: str, loc: Vec3, radius=1.0, height=2.0, label=""):
     # боковые патрубки/фланцы: nozzle spool торчит из стенки, flange на конце spool
     nozzle_z = base_z + 0.28 + min(1.0, height * 0.45)
     spool_len = 0.18
-    spool_r = 0.075
+    spool_r = 0.075   # DN80
     # inlet (left)
     spool_in_start = (x - radius, y, nozzle_z)
     spool_in_end   = (x - radius - spool_len, y, nozzle_z)
     cylinder_between(name + "_inlet_spool", spool_in_start, spool_in_end, spool_r, MATS["steel"], vertices=14)
-    add_flange(name + "_inlet_nozzle", spool_in_end, (-1, 0, 0), 0.14, MATS["steel"])
+    add_flange(name + "_inlet_nozzle", spool_in_end, (-1, 0, 0), spool_r, MATS["steel"])
     # outlet (right)
     spool_out_start = (x + radius, y, nozzle_z)
     spool_out_end   = (x + radius + spool_len, y, nozzle_z)
     cylinder_between(name + "_outlet_spool", spool_out_start, spool_out_end, spool_r, MATS["steel"], vertices=14)
-    add_flange(name + "_outlet_nozzle", spool_out_end, (1, 0, 0), 0.14, MATS["steel"])
+    add_flange(name + "_outlet_nozzle", spool_out_end, (1, 0, 0), spool_r, MATS["steel"])
     add_cylinder(name + "_top_vent", (x, y, base_z + 0.28 + height + 0.62), 0.07, 0.36, MATS["steel"], vertices=16)
     if label:
         add_label(label, (x, y - radius - 0.7, base_z + 0.08), size=0.32)
@@ -559,8 +634,8 @@ def add_pump_block(name: str, loc: Vec3, count=3, water=False):
         add_cylinder(f"{name}_motor_{i+1}", (x - 0.78, yy, z + 0.51), 0.20, 0.55, MATS["green"], axis="X", vertices=20)
         cylinder_between(f"{name}_suction_spool_{i+1}", (suction_x, yy, z + 0.55), (x - 0.62, yy, z + 0.55), 0.055, MATS["steel"], vertices=14)
         cylinder_between(f"{name}_discharge_spool_{i+1}", (x + 0.62, yy, z + 0.62), (discharge_x, yy, z + 0.62), 0.055, material, vertices=14)
-        add_flange(f"{name}_pump_suction_flange_{i+1}", (x - 0.62, yy, z + 0.55), (1, 0, 0), 0.06, MATS["steel"])
-        add_flange(f"{name}_pump_discharge_flange_{i+1}", (x + 0.62, yy, z + 0.62), (1, 0, 0), 0.06, material)
+        add_flange(f"{name}_pump_suction_flange_{i+1}", (x - 0.62, yy, z + 0.55), (1, 0, 0), 0.055, MATS["steel"])
+        add_flange(f"{name}_pump_discharge_flange_{i+1}", (x + 0.62, yy, z + 0.62), (1, 0, 0), 0.055, material)
 
 
 
@@ -601,18 +676,18 @@ def add_export_pump_block_connected(name: str, loc: Vec3):
     add_box(name + "_common_skid", (x, y, z + 0.12), (2.55, 1.55, 0.18), MATS["steel"])
     cylinder_between(name + "_visible_suction_header", (suction_x, y - 0.60, z + 0.55), (suction_x, y + 0.60, z + 0.55), 0.13, MATS["steel"], vertices=24)
     cylinder_between(name + "_visible_discharge_header", (discharge_x, y - 0.60, z + 0.62), (discharge_x, y + 0.60, z + 0.62), 0.135, MATS["pipe_product"], vertices=26)
-    add_flange(name + "_suction_header_lower_cap", (suction_x, y - 0.60, z + 0.55), (0, -1, 0), 0.145, MATS["steel"])
-    add_flange(name + "_suction_header_upper_cap", (suction_x, y + 0.60, z + 0.55), (0, 1, 0), 0.145, MATS["steel"])
-    add_flange(name + "_discharge_header_lower_cap", (discharge_x, y - 0.60, z + 0.62), (0, -1, 0), 0.15, MATS["steel"])
-    add_flange(name + "_discharge_header_upper_cap", (discharge_x, y + 0.60, z + 0.62), (0, 1, 0), 0.15, MATS["steel"])
+    add_flange(name + "_suction_header_lower_cap", (suction_x, y - 0.60, z + 0.55), (0, -1, 0), 0.135, MATS["steel"])
+    add_flange(name + "_suction_header_upper_cap", (suction_x, y + 0.60, z + 0.55), (0, 1, 0), 0.135, MATS["steel"])
+    add_flange(name + "_discharge_header_lower_cap", (discharge_x, y - 0.60, z + 0.62), (0, -1, 0), 0.135, MATS["steel"])
+    add_flange(name + "_discharge_header_upper_cap", (discharge_x, y + 0.60, z + 0.62), (0, 1, 0), 0.135, MATS["steel"])
     for i, yy in enumerate(yy_list, start=1):
         add_box(f"{name}_pump_base_{i}", (x, yy, z + 0.24), (1.58, 0.48, 0.14), MATS["steel"])
         add_box(f"{name}_pump_{i}", (x, yy, z + 0.50), (1.18, 0.36, 0.38), MATS["orange"])
         add_cylinder(f"{name}_motor_{i}", (x - 0.78, yy, z + 0.51), 0.20, 0.55, MATS["green"], axis="X", vertices=20)
-        cylinder_between(f"{name}_suction_tie_{i}", (suction_x, yy, z + 0.55), (x - 0.58, yy, z + 0.55), 0.09, MATS["steel"], vertices=18)
+        cylinder_between(f"{name}_suction_tie_{i}", (x - 0.52, yy, z + 0.62), (suction_x, yy, z + 0.62), 0.12, MATS["pipe_product"], vertices=20)
         cylinder_between(f"{name}_discharge_tie_{i}", (x + 0.58, yy, z + 0.62), (discharge_x, yy, z + 0.62), 0.105, MATS["pipe_product"], vertices=20)
-        add_flange(f"{name}_suction_tie_flange_{i}", (suction_x, yy, z + 0.55), (0, 1, 0), 0.135, MATS["steel"])
-        add_flange(f"{name}_discharge_tie_flange_{i}", (discharge_x, yy, z + 0.62), (0, 1, 0), 0.145, MATS["steel"])
+        add_flange(f"{name}_suction_tie_flange_{i}", (suction_x, yy, z + 0.55), (0, 1, 0), 0.12, MATS["steel"])
+        add_flange(f"{name}_discharge_tie_flange_{i}", (discharge_x, yy, z + 0.62), (0, 1, 0), 0.105, MATS["steel"])
 
 
 def add_facility_upn(loc: Vec3):
@@ -975,9 +1050,8 @@ def build_field():
         tree_side = (p[0] + 0.52 * tree_scale, wellhead_y, 1.16 * tree_scale)
         wellhead_port = (p[0] + 0.90 * tree_scale, wellhead_y, 1.16 * tree_scale)
         wellhead_drop = (p[0] + 0.90 * tree_scale, p[1] - 3.65 * pump_scale, 0.68)
-        cylinder_between(f"Flowline_well_{i}_wellhead_side_spool", tree_side, wellhead_port, 0.075, MATS["pipe_oil"], vertices=18)
-        add_flange(f"Flowline_well_{i}_wellhead_tree_flange", tree_side, (1, 0, 0), 0.10, MATS["steel"])
-        add_flange(f"Flowline_well_{i}_wellhead_tie_in_flange", wellhead_port, (1, 0, 0), 0.11, MATS["steel"])
+        add_pipe_spool(f"Flowline_well_{i}_wellhead_spool", tree_side, wellhead_port, "dn80",
+                       with_flanges=True, with_support=False)
         add_cylinder(f"Flowline_well_{i}_wellhead_gate_valve", ((tree_side[0] + wellhead_port[0]) / 2, wellhead_y, 1.16 * tree_scale + 0.12), 0.085, 0.12, MATS["red"], vertices=18)
         pipe_path(
             f"Flowline_well_{i}_to_manifold",
@@ -999,7 +1073,7 @@ def build_field():
     # Явная короткая обвязка проблемного узла у УПСВ: патрубок, фланец, колено и вход в аппарат.
     # Конец магистрали теперь стыкуется с фланцем левой крышки сепаратора, а не пересекает корпус.
     pipe_path("UPSV_separator_nozzle_spool", [(1.54, 1.1, 1.10), (1.70, 1.1, 1.10)], 0.095, MATS["pipe_oil"])
-    add_flange("UPSV_separator_inlet_extra_flange", (1.68, 1.1, 1.10), (-1, 0, 0), 0.13, MATS["steel"])
+    add_flange("UPSV_separator_inlet_extra_flange", (1.68, 1.1, 1.10), (-1, 0, 0), 0.095, MATS["steel"])
     # Правая сторона УПСВ -> УПН перенесена на свободную нижнюю трассу:
     # короткий выход от УПСВ, затем прямой коридор вправо и подъём к treater.
     # Так вместо косой вставки получаются читаемые тороидальные углы 90° и
@@ -1007,11 +1081,10 @@ def build_field():
     upsv_oil_outlet = (5.02, 1.1, 1.10)
     upsv_lower_lane = (5.02, -1.25, 1.16)
     pipe_path("UPSV_to_UPN_treater_inlet", [upsv_oil_outlet, upsv_lower_lane, (12.57, -1.25, 1.20), (12.57, 1.00, 1.20)], 0.15, MATS["pipe_oil"])
-    # Критический видимый ввод в левый торец treater: отдельный осевой spool
-    # слегка входит в патрубок аппарата, поэтому на рендере нет оборванного конца.
-    cylinder_between("UPN_treater_left_nozzle_visible_axis_spool", (11.88, 1.00, 1.20), (12.72, 1.00, 1.20), 0.15, MATS["pipe_oil"], vertices=28)
-    add_flange("UPN_treater_left_nozzle_visible_axis_flange", (12.57, 1.00, 1.20), (1, 0, 0), 0.18, MATS["steel"])
-    add_flange("UPSV_oil_outlet_clear_tie_in", (5.04, 1.1, 1.10), (1, 0, 0), 0.15, MATS["steel"])
+    # Критический видимый ввод в левый торец treater
+    add_pipe_spool("UPN_treater_left_nozzle_visible_axis_spool", (11.88, 1.00, 1.20), (12.72, 1.00, 1.20), "dn200",
+                   with_flanges=True, with_support=False)
+    add_flange("UPSV_oil_outlet_clear_tie_in", (5.04, 1.1, 1.10), (1, 0, 0), 0.095, MATS["steel"])
 
     # УПН / товарная нефть: схема перестроена как связная цепочка
     # treater -> резервуары -> насосный skid -> экспорт. Артефактов между
@@ -1026,28 +1099,26 @@ def build_field():
     pump_suction_top = (18.02, -1.25, 0.55)
     pump_discharge_mid = (20.42, -1.85, 0.62)
 
-    # Treater -> первый резервуар: вместо двух мелких поворотов оставлен один
-    # короткий наклонный spool между патрубками.
+    # Treater -> первый резервуар
     cylinder_between("UPN_treater_to_sales_tank_A_simple_sloped_spool", treater_out, tank_a_in, 0.12, MATS["pipe_product"], vertices=28)
-    add_flange("UPN_treater_outlet_simple_flange", treater_out, (1, 0, 0), 0.15, MATS["steel"])
-    add_flange("UPN_sales_tank_A_inlet_simple_flange", tank_a_in, (1, 0, 0), 0.15, MATS["steel"])
+    add_flange("UPN_treater_outlet_simple_flange", treater_out, (1, 0, 0), 0.12, MATS["steel"])
+    add_flange("UPN_sales_tank_A_inlet_simple_flange", tank_a_in, (1, 0, 0), 0.12, MATS["steel"])
     cylinder_between("UPN_sales_tanks_equalizing_spool", tank_a_out, tank_b_in, 0.105, MATS["pipe_product"], vertices=24)
-    add_flange("UPN_sales_tank_A_equalizing_flange", tank_a_out, (1, 0, 0), 0.14, MATS["steel"])
-    add_flange("UPN_sales_tank_B_equalizing_flange", tank_b_in, (1, 0, 0), 0.14, MATS["steel"])
-    # Второй резервуар -> насос: одна понятная нижняя линия без лишних обходов.
+    add_flange("UPN_sales_tank_A_equalizing_flange", tank_a_out, (1, 0, 0), 0.105, MATS["steel"])
+    add_flange("UPN_sales_tank_B_equalizing_flange", tank_b_in, (1, 0, 0), 0.105, MATS["steel"])
+    # Второй резервуар -> насос
     cylinder_between("UPN_sales_tank_B_to_export_pump_suction_simple_spool", tank_b_out, pump_suction_top, 0.13, MATS["pipe_product"], vertices=28)
-    add_flange("UPN_sales_tank_B_to_pump_suction_tank_flange", tank_b_out, (1, 0, 0), 0.15, MATS["steel"])
-    add_flange("UPN_sales_tank_B_to_pump_suction_pump_flange", pump_suction_top, (-1, 0, 0), 0.15, MATS["steel"])
+    add_flange("UPN_sales_tank_B_to_pump_suction_tank_flange", tank_b_out, (1, 0, 0), 0.13, MATS["steel"])
+    add_flange("UPN_sales_tank_B_to_pump_suction_pump_flange", pump_suction_top, (-1, 0, 0), 0.13, MATS["steel"])
     add_pipe_support_at("UPN_tank_to_pump_suction_support_1", (20.00, -0.05, 1.05), 0.13)
 
-    # Выход с насосной станции упрощён: короткий подъём от насоса и далее
-    # прямая экспортная линия вправо, без каскада близких поворотов.
+    # Выход с насосной станции
     export_riser_top = (20.42, -1.85, 1.12)
     export_end = (29.00, -1.85, 1.12)
     cylinder_between("UPN_export_pump_discharge_vertical_riser", pump_discharge_mid, export_riser_top, 0.16, MATS["pipe_product"], vertices=28)
     cylinder_between("UPN_export_pumps_to_sales_oil_export_straight", export_riser_top, export_end, 0.16, MATS["pipe_product"], vertices=28)
-    add_flange("UPN_export_pump_discharge_riser_flange", export_riser_top, (1, 0, 0), 0.18, MATS["steel"])
-    add_flange("UPN_export_boundary_flange", export_end, (1, 0, 0), 0.18, MATS["steel"])
+    add_flange("UPN_export_pump_discharge_riser_flange", export_riser_top, (1, 0, 0), 0.16, MATS["steel"])
+    add_flange("UPN_export_boundary_flange", export_end, (1, 0, 0), 0.16, MATS["steel"])
     for idx, p in enumerate([(22.70, -1.85, 1.12), (25.15, -1.85, 1.12), (27.40, -1.85, 1.12)], start=1):
         add_pipe_support_at(f"UPN_export_connected_support_{idx}", p, 0.16)
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
@@ -1060,9 +1131,9 @@ def build_field():
     # За счёт этого справа от КНС нет отдельного внутреннего стояка, внешней
     # трубы поверх него и дублирующих фланцев в одной точке.
     pipe_path("KNS_to_BKNS_water", [(10.32, 12.30, 0.62), (11.35, 12.30, 0.62), (11.35, 12.30, 0.95), (11.35, 13.85, 0.95), (-5.18, 13.85, 0.95), (-5.18, 12.0, 0.95)], 0.12, MATS["pipe_water"])
-    add_flange("BKNS_suction_external_tie_in_flange", (-5.18, 12.0, 0.95), (0, -1, 0), 0.13, MATS["steel"])
+    add_flange("BKNS_suction_external_tie_in_flange", (-5.18, 12.0, 0.95), (0, -1, 0), 0.12, MATS["steel"])
     pipe_path("BKNS_to_injection_well", [(-2.78, 12.0, 1.05), (-2.78, 15.0, 1.05), (-0.20, 15.0, 1.05)], 0.13, MATS["pipe_water"])
-    add_flange("Injection_well_water_tie_in_flange", (-0.20, 15.0, 1.05), (1, 0, 0), 0.14, MATS["steel"])
+    add_flange("Injection_well_water_tie_in_flange", (-0.20, 15.0, 1.05), (1, 0, 0), 0.13, MATS["steel"])
 
     # Газовая линия и факел
     # ДНС теперь явно связана с верхней газовой трубой через патрубок/короткий штуцер.
