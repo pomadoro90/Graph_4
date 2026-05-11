@@ -522,10 +522,20 @@ def add_tank(name: str, loc: Vec3, radius=1.0, height=2.0, label=""):
     add_cylinder(name + "_wall", (x, y, base_z + 0.28 + height / 2), radius, height, MATS["tank"], vertices=56)
     add_cylinder(name + "_roof", (x, y, base_z + 0.28 + height + 0.08), radius * 0.98, 0.16, MATS["tank"], vertices=56)
     add_cylinder(name + "_roof_center_cap", (x, y, base_z + 0.28 + height + 0.22), radius * 0.18, 0.12, MATS["steel"], vertices=24)
-    # боковые патрубки/фланцы для видимой технологической связности
+    # боковые патрубки/фланцы: nozzle spool торчит из стенки, flange на конце spool
     nozzle_z = base_z + 0.28 + min(1.0, height * 0.45)
-    add_flange(name + "_inlet_nozzle", (x - radius - 0.08, y, nozzle_z), (-1, 0, 0), 0.14, MATS["steel"])
-    add_flange(name + "_outlet_nozzle", (x + radius + 0.08, y, nozzle_z), (1, 0, 0), 0.14, MATS["steel"])
+    spool_len = 0.18
+    spool_r = 0.075
+    # inlet (left)
+    spool_in_start = (x - radius, y, nozzle_z)
+    spool_in_end   = (x - radius - spool_len, y, nozzle_z)
+    cylinder_between(name + "_inlet_spool", spool_in_start, spool_in_end, spool_r, MATS["steel"], vertices=14)
+    add_flange(name + "_inlet_nozzle", spool_in_end, (-1, 0, 0), 0.14, MATS["steel"])
+    # outlet (right)
+    spool_out_start = (x + radius, y, nozzle_z)
+    spool_out_end   = (x + radius + spool_len, y, nozzle_z)
+    cylinder_between(name + "_outlet_spool", spool_out_start, spool_out_end, spool_r, MATS["steel"], vertices=14)
+    add_flange(name + "_outlet_nozzle", spool_out_end, (1, 0, 0), 0.14, MATS["steel"])
     add_cylinder(name + "_top_vent", (x, y, base_z + 0.28 + height + 0.62), 0.07, 0.36, MATS["steel"], vertices=16)
     if label:
         add_label(label, (x, y - radius - 0.7, base_z + 0.08), size=0.32)
@@ -1009,10 +1019,10 @@ def build_field():
     # уравнительной перемычкой; все углы идут через pipe_path() и тороидальные
     # elbow-mesh, без сферических узлов.
     treater_out = (16.43, 1.00, 1.20)
-    tank_a_in = (17.17, 1.20, 1.225)
-    tank_a_out = (19.23, 1.20, 1.225)
-    tank_b_in = (19.37, 1.20, 1.225)
-    tank_b_out = (21.43, 1.20, 1.225)
+    tank_a_in = (17.37, 1.20, 1.225)
+    tank_a_out = (19.38, 1.20, 1.225)
+    tank_b_in = (19.57, 1.20, 1.225)
+    tank_b_out = (21.58, 1.20, 1.225)
     pump_suction_top = (18.02, -1.25, 0.55)
     pump_discharge_mid = (20.42, -1.85, 0.62)
 
