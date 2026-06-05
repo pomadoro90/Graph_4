@@ -1235,14 +1235,14 @@ def build_field():
     ], 0.13, MATS["pipe_product"], bend_factor=2.0)
     add_flange("UPN_tank_B_outlet_flange", (22.13, 1.00, 1.225), (1, 0, 0), 0.13, MATS["steel"])
 
-    # Насос discharge -> экспорт: вверх и на восток
+    # Насос discharge -> экспорт: от верхнего конца discharge_header вверх и на восток
     pipe_path("UPN_pump_to_export", [
-        (20.42, -3.00, 0.62),  # discharge_header
-        (20.42, -3.00, 1.20),  # подъём до уровня коллектора
-        (29.00, -3.00, 1.20),  # горизонтально к экспорту
+        (20.42, -2.40, 0.62),  # верхний конец discharge_header
+        (20.42, -2.40, 1.20),  # подъём до уровня коллектора (90° отвод)
+        (29.00, -2.40, 1.20),  # горизонтально к экспорту (90° отвод)
     ], 0.16, MATS["pipe_product"], bend_factor=2.0)
-    add_flange("UPN_export_boundary_flange", (29.00, -3.00, 1.20), (1, 0, 0), 0.16, MATS["steel"])
-    for idx, p in enumerate([(22.70, -3.00, 1.20), (25.15, -3.00, 1.20), (27.40, -3.00, 1.20)], start=1):
+    add_flange("UPN_export_boundary_flange", (29.00, -2.40, 1.20), (1, 0, 0), 0.16, MATS["steel"])
+    for idx, p in enumerate([(22.70, -2.40, 1.20), (25.15, -2.40, 1.20), (27.40, -2.40, 1.20)], start=1):
         add_pipe_support_at(f"UPN_export_support_{idx}", p, 0.16, (1, 0, 0))
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
 
