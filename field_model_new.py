@@ -882,7 +882,10 @@ def add_facility_flare(loc: Vec3):
     # Put the southeastern lowest anchor (315 deg) exactly at the requested point.
     anchor_angle = math.radians(315.0)
     anchor_original = Vector((math.cos(anchor_angle) * 20.0, -1.0 + math.sin(anchor_angle) * 20.0, 0.0))
+    # Shift right by distance between adjacent anchors (2 * GR * sin(45°)).
+    ANCHOR_SPACING = 2 * 20.0 * math.sin(math.pi / 4)  # ≈ 28.284
     offset = Vector((17.0, 8.0, 0.0)) - anchor_original
+    offset.x += ANCHOR_SPACING
     translation = Matrix.Translation(offset)
     world_matrices = {obj: obj.matrix_world.copy() for obj in new_objs}
     for obj in new_objs:
