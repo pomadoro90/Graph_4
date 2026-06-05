@@ -878,12 +878,18 @@ def add_facility_flare(loc: Vec3):
             bpy.data.objects.remove(obj, do_unlink=True)
             new_objs.remove(obj)
 
-    # build_all.py is authored around the flare scene center near (0, -4, 0).
-    offset = Vector((loc[0] - 0.0, loc[1] - (-4.0), loc[2] - 0.0))
+    # build_all.py anchors guy wires at 20 m from the stack center (FX=0, FY=-1).
+    # Put the southeastern lowest anchor (315 deg) exactly at the requested point.
+    anchor_angle = math.radians(315.0)
+    anchor_original = Vector((math.cos(anchor_angle) * 20.0, -1.0 + math.sin(anchor_angle) * 20.0, 0.0))
+    offset = Vector((17.0, 8.0, 0.0)) - anchor_original
     translation = Matrix.Translation(offset)
     world_matrices = {obj: obj.matrix_world.copy() for obj in new_objs}
     for obj in new_objs:
         obj.matrix_world = translation @ world_matrices[obj]
+
+    stack_loc = (offset.x, -1.0 + offset.y, 0.0)
+    add_label("Факельная\nустановка", (stack_loc[0], stack_loc[1] - 2.0, 0.08), size=0.32)
 
 
 def add_arrow(name: str, loc: Vec3, direction="X", material=None):
