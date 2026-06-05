@@ -1135,9 +1135,6 @@ def build_field():
         (12.57, 1.00, 1.20),  # вход в левый nozzle treater по +X
     ], 0.15, MATS["pipe_oil"])
     add_flange("UPSV_sep1_outlet_flange", (4.98, 1.1, 1.20), (1, 0, 0), 0.15, MATS["steel"])
-    # Критический видимый ввод в левый торец treater
-    add_pipe_spool("UPN_treater_left_nozzle_visible_axis_spool", (11.88, 1.00, 1.20), (12.72, 1.00, 1.20), "dn200",
-                   with_flanges=True, with_support=False)
 
     # --- Перелив водяного бака: от верхнего центра бака вверх, затем
     #     горизонтально к outlet-патрубку. ---
@@ -1208,27 +1205,30 @@ def build_field():
     add_flange("Injection_well_water_tie_in_flange", (-0.20, 15.0, 1.05), (1, 0, 0), 0.13, MATS["steel"])
 
     # Газовая линия и факел
-    # Все газовые трубы на единой высоте z=2.30. Отводы от аппаратов —
-    # вертикальные стояки от gas_nozzle до уровня газового коллектора,
-    # затем горизонтальные участки с 90° торообразными отводами.
+    # Все газовые трубы на единой высоте z=2.30 с 90° торообразными отводами
+    # (add_quarter_torus_elbow) на каждом повороте — через единый pipe_path.
 
-    # DNS: вертикальный стояк от gas_nozzle (z=2.03) до z=2.30
-    pipe_path("DNS_gas_riser", [(-6.3, -1.9, 2.03), (-6.3, -1.9, 2.30)], 0.07, MATS["pipe_gas"])
+    # ДНС→УПСВ: от gas_nozzle DNS вертикально вверх, затем горизонтально к UPSV sep2
+    pipe_path("Gas_line_DNS_UPSV", [
+        (-6.3, -1.9, 2.03),   # DNS gas_nozzle
+        (-6.3, -1.9, 2.30),   # подъём до уровня коллектора (90° отвод)
+        (-6.3, -0.7, 2.30),   # поворот на юг (90° отвод)
+        (3.3, -0.7, 2.30),    # горизонтально к УПСВ (90° отвод)
+    ], 0.07, MATS["pipe_gas"])
     add_flange("DNS_gas_riser_flange", (-6.3, -1.9, 2.03), (0, 0, 1), 0.07, MATS["pipe_gas"])
 
-    # UPSV separator_2: вертикальный стояк от gas_nozzle (z=1.83) до z=2.30
-    pipe_path("UPSV_sep2_gas_riser", [(3.3, -0.7, 1.83), (3.3, -0.7, 2.30)], 0.07, MATS["pipe_gas"])
+    # УПСВ→УПН: от gas_nozzle UPSV sep2 вертикально вверх, горизонтально за УПН,
+    # спуск к gas_nozzle treater — все повороты через торообразные отводы
+    pipe_path("Gas_line_UPSV_UPN", [
+        (3.3, -0.7, 1.83),   # UPSV sep2 gas_nozzle
+        (3.3, -0.7, 2.30),   # подъём до уровня коллектора (90° отвод)
+        (3.3, 3.35, 2.30),   # поворот на север (90° отвод)
+        (14.5, 3.35, 2.30),  # горизонтально к УПН (90° отвод)
+        (14.5, 1.0, 2.30),   # поворот на юг (90° отвод)
+        (14.5, 1.0, 2.00),   # спуск к treater gas_nozzle (90° отвод)
+    ], 0.07, MATS["pipe_gas"])
     add_flange("UPSV_sep2_gas_riser_flange", (3.3, -0.7, 1.83), (0, 0, 1), 0.07, MATS["pipe_gas"])
-
-    # UPN treater: вертикальный стояк от gas_nozzle (z=2.00) до z=2.30
-    pipe_path("UPN_treater_gas_riser", [(14.5, 1.0, 2.00), (14.5, 1.0, 2.30)], 0.07, MATS["pipe_gas"])
-    add_flange("UPN_treater_gas_riser_flange", (14.5, 1.0, 2.00), (0, 0, 1), 0.07, MATS["pipe_gas"])
-
-    # Горизонтальный газовый коллектор ДНС→УПСВ на z=2.30
-    pipe_path("Gas_line_DNS_UPSV", [(-6.3, -1.9, 2.30), (-6.3, -0.7, 2.30), (3.3, -0.7, 2.30)], 0.07, MATS["pipe_gas"])
-
-    # Горизонтальный газовый коллектор УПСВ→УПН на z=2.30
-    pipe_path("Gas_line_UPSV_UPN", [(3.3, -0.7, 2.30), (3.3, 3.35, 2.30), (14.5, 3.35, 2.30), (14.5, 1.0, 2.30)], 0.07, MATS["pipe_gas"])
+    add_flange("UPN_treater_gas_riser_flange", (14.5, 1.0, 2.00), (0, 0, -1), 0.07, MATS["pipe_gas"])
 
     # Стрелки потоков
     add_arrow("Arrow_gathering", (-9.0, -3.8, 1.15), direction="Y", material=MATS["orange"])
