@@ -1180,7 +1180,7 @@ def build_field():
     make_materials()
 
     # Земля и дороги
-    add_box("Field_ground", (0, 0, -0.03), (62, 42, 0.04), MATS["ground"])
+    add_box("Field_ground", (10, 5, -0.03), (100, 60, 0.04), MATS["ground"])
     build_road_network()
 
     # Куст добывающих скважин
@@ -1334,18 +1334,41 @@ def build_field():
 
     # Ответвление газопровода к сепаратору факельной установки
     pipe_path("Gas_line_UPN_to_flare_sep", [
-        (14.5, 3.35, 2.30),    # T-junction на газопроводе УПСВ→УПН
-        (14.5, 3.35, 4.20),    # подъём до уровня входа сепаратора
-        (19.27, 3.35, 4.20),   # горизонтально на восток
-        (19.27, 17.14, 4.20),  # на север к входу сепаратора
+        (14.5, 3.35, 2.30),    # T-junction на газопроводе
+        (14.5, 3.35, 5.50),    # подъём над оборудованием
+        (19.27, 3.35, 5.50),   # горизонтально на восток
+        (19.27, 17.14, 5.50),  # на север к сепаратору
+        (19.27, 17.14, 4.55),  # спуск к Sep_Inlet_BlindCap сверху
     ], 0.07, MATS["pipe_gas"])
-    add_flange("Flare_sep_inlet_flange", (19.27, 17.14, 4.20), (0, 1, 0), 0.07, MATS["pipe_gas"])
+    add_flange("Flare_sep_inlet_flange", (19.27, 17.14, 4.55), (0, 1, 0), 0.07, MATS["pipe_gas"])
+
+    # Газоотвод от вентиля сепаратора к стволу факела
+    pipe_path("Gas_line_sep_vent_to_stack", [
+        (23.24, 17.14, 4.55),  # от Vent BlindCap
+        (23.24, 17.14, 5.50),  # подъём над периллами
+        (30.49, 17.14, 5.50),  # горизонтально к стволу (западная стенка ствола)
+        (30.49, 22.14, 5.50),  # на север вдоль ствола
+        (30.49, 22.14, 6.10),  # подъём к высоте входа
+    ], 0.07, MATS["pipe_gas"])
+    add_flange("Flare_sep_vent_flange", (23.24, 17.14, 4.55), (0, 0, 1), 0.07, MATS["pipe_gas"])
+
+    # Паровая/служебная линия от ствола факела к колену KNS_to_BKNS
+    pipe_path("Steam_line_stack_to_KNS", [
+        (30.49, 22.14, 0.60),  # от ствола факела на уровне земли
+        (30.49, 12.30, 0.60),  # на юг к KNS
+        (11.35, 12.30, 0.60),  # на запад к колену KNS_to_BKNS
+        (11.35, 12.30, 0.95),  # подъём к колену
+    ], 0.06, MATS["pipe_gas"])
+    add_flange("Stack_steam_outlet_flange", (30.49, 22.14, 0.60), (0, -1, 0), 0.06, MATS["pipe_gas"])
+    add_flange("KNS_steam_inlet_flange", (11.35, 12.30, 0.95), (0, 0, 1), 0.06, MATS["pipe_gas"])
 
     # Стрелки потоков
     add_arrow("Arrow_gathering", (-9.0, -3.8, 1.15), direction="Y", material=MATS["orange"])
     add_arrow("Arrow_dns_upsv", (0.5, -1.0, 1.35), direction="X", material=MATS["orange"])
     add_arrow("Arrow_upsv_upn", (11.0, 0.2, 1.4), direction="X", material=MATS["orange"])
     add_arrow("Arrow_gas_to_flare", (17, 10, 3.2), direction="Y", material=MATS["pipe_gas"])
+    add_arrow("Arrow_vent_to_stack", (27, 17, 5.0), direction="X", material=MATS["pipe_gas"])
+    add_arrow("Arrow_steam_to_kns", (20, 12.3, 0.8), direction="-X", material=MATS["pipe_gas"])
     add_arrow("Arrow_export", (25.5, -2.2, 1.2), direction="X", material=MATS["pipe_product"])
     add_arrow("Arrow_water_to_bkns", (2.0, 12.0, 1.15), direction="-X", material=MATS["blue"])
     add_arrow("Arrow_water_to_inj", (-4.0, 15.0, 1.25), direction="X", material=MATS["blue"])
