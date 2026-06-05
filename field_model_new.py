@@ -435,6 +435,61 @@ def add_road(name: str, p1: Vec3, p2: Vec3, width=1.0):
     add_box(name, ((x1 + x2) / 2, (y1 + y2) / 2, 0.035), (length, width, 0.035), MATS["road"], rot=(0, 0, angle))
 
 
+def build_road_network():
+    """Build all road segments as a single merged mesh to avoid z-fighting at junctions."""
+    import bmesh
+
+    segments = [
+        # (x1, y1, x2, y2, width) -- all at z=0.035
+        (-26, -6, 24, -6, 1.0),
+        (-10.5, -4.5, -10.5, -6, 0.75),
+        (-10.5, -6, -6, -6, 0.75),
+        (1, -6, 1, -3.5, 0.85),
+        (11.5, -6, 11.5, -4, 0.85),
+        (10.5, -6, 10.5, 9.5, 0.85),
+        (10.5, 9.5, 4.5, 9.5, 0.75),
+        (4.5, 9.5, -2, 9.5, 0.75),
+        (-2, 9.5, -2, 15, 0.75),
+        (-2, 15, 0, 15, 0.75),
+    ]
+
+    z_top = 0.035
+    bm = bmesh.new()
+
+    for x1, y1, x2, y2, width in segments:
+        dx = x2 - x1
+        dy = y2 - y1
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 0.001:
+            continue
+
+        nx = -dy / length * width / 2
+        ny = dx / length * width / 2
+
+        v0 = bm.verts.new((x1 + nx, y1 + ny, z_top))
+        v1 = bm.verts.new((x1 - nx, y1 - ny, z_top))
+        v2 = bm.verts.new((x2 - nx, y2 - ny, z_top))
+        v3 = bm.verts.new((x2 + nx, y2 + ny, z_top))
+        bm.faces.new([v0, v1, v2, v3])
+
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=0.05)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+
+    mesh = bpy.data.meshes.new("Roads_mesh")
+    bm.to_mesh(mesh)
+    bm.free()
+
+    obj = bpy.data.objects.new("Roads", mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.data.materials.append(MATS["road"])
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+    bpy.ops.object.shade_flat()
+    obj.select_set(False)
+
+    return obj
+
+
 # ---------------------------------------------------------------------------
 # Нефтепромысловые элементы
 # ---------------------------------------------------------------------------
@@ -1013,15 +1068,7 @@ def build_field():
 
     # Земля и дороги
     add_box("Field_ground", (0, 0, -0.03), (62, 42, 0.04), MATS["ground"])
-    add_road("Road_south_service", (-26, -6, 0), (24, -6, 0), 1.0)
-    add_road("Road_dns_access", (-10.5, -4.5, 0), (-10.5, -6, 0), 0.75)
-    add_road("Road_dns_entrance", (-10.5, -6, 0), (-6, -6, 0), 0.75)
-    add_road("Road_upsv_access", (1, -6, 0), (1, -3.5, 0), 0.85)
-    add_road("Road_upn_access", (11.5, -6, 0), (11.5, -4, 0), 0.85)
-    add_road("Road_north_south", (10.5, -6, 0), (10.5, 9.5, 0), 0.85)
-    add_road("Road_kns_east", (10.5, 9.5, 0), (4.5, 9.5, 0), 0.75)
-    add_road("Road_bkns_access", (4.5, 9.5, 0), (-2, 9.5, 0), 0.75)
-    add_road("Road_injection_spur", (-2, 9.5, 0), (0, 15, 0), 0.75)
+    build_road_network()
 
     # Куст добывающих скважин
     producing = [(-22, -9, 0), (-17, -11, 0), (-20, -4, 0)]
