@@ -1013,10 +1013,15 @@ def build_field():
 
     # Земля и дороги
     add_box("Field_ground", (0, 0, -0.03), (62, 42, 0.04), MATS["ground"])
-    add_road("Road_main_wellpad_to_dns", (-20, -8, 0), (-5, -1, 0), 0.75)
-    add_road("Road_dns_upsv", (-5, -1, 0), (5, 0, 0), 0.85)
-    add_road("Road_upsv_upn", (5, 0, 0), (16, 0, 0), 0.85)
-    add_road("Road_water_stations", (5, 0, 0), (4, 12, 0), 0.75)
+    add_road("Road_south_service", (-26, -6, 0), (24, -6, 0), 1.0)
+    add_road("Road_dns_access", (-10.5, -4.5, 0), (-10.5, -6, 0), 0.75)
+    add_road("Road_dns_entrance", (-10.5, -6, 0), (-6, -6, 0), 0.75)
+    add_road("Road_upsv_access", (1, -6, 0), (1, -3.5, 0), 0.85)
+    add_road("Road_upn_access", (11.5, -6, 0), (11.5, -4, 0), 0.85)
+    add_road("Road_north_south", (10.5, -6, 0), (10.5, 9.5, 0), 0.85)
+    add_road("Road_kns_east", (10.5, 9.5, 0), (4.5, 9.5, 0), 0.75)
+    add_road("Road_bkns_access", (4.5, 9.5, 0), (-2, 9.5, 0), 0.75)
+    add_road("Road_injection_spur", (-2, 9.5, 0), (0, 15, 0), 0.75)
 
     # Куст добывающих скважин
     producing = [(-22, -9, 0), (-17, -11, 0), (-20, -4, 0)]
