@@ -888,8 +888,11 @@ def add_facility_flare(loc: Vec3):
     offset.x += ANCHOR_SPACING
     translation = Matrix.Translation(offset)
     world_matrices = {obj: obj.matrix_world.copy() for obj in new_objs}
+    new_obj_names = {obj.name for obj in new_objs}
+    # Only translate root objects (no parent in new_objs) — children follow via parent transform
     for obj in new_objs:
-        obj.matrix_world = translation @ world_matrices[obj]
+        if obj.parent is None or obj.parent.name not in new_obj_names:
+            obj.matrix_world = translation @ world_matrices[obj]
 
     stack_loc = (offset.x, -1.0 + offset.y, 0.0)
     add_label("Факельная\nустановка", (stack_loc[0], stack_loc[1] - 2.0, 0.08), size=0.32)
