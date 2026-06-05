@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import math
 import os
+import importlib.util
+import sys
 from typing import Iterable, Tuple
 
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 Vec3 = Tuple[float, float, float]
 
@@ -851,6 +853,39 @@ def add_facility_kns(loc: Vec3):
     add_label("КНС\nкустовая насосная", (x, y - 2.7, z + 0.08), size=0.31)
 
 
+def add_facility_flare(loc: Vec3):
+    """Размещает факельную установку + сепаратор из build_all.py."""
+    existing = set(bpy.data.objects.keys())
+    build_all_path = os.path.join(HERE, "build_all.py")
+    module_name = "_field_model_build_all_flare"
+
+    spec = importlib.util.spec_from_file_location(module_name, build_all_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load flare scene script: {build_all_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    module._FLARE_IMPORT_MODE = True
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(module_name, None)
+
+    new_objs = [obj for obj in bpy.data.objects if obj.name not in existing]
+    cleanup_names = {"Ground", "Pad", "geo_ground", "Camera"}
+    for obj in list(new_objs):
+        if obj.name in cleanup_names or obj.type in {"CAMERA", "LIGHT"}:
+            bpy.data.objects.remove(obj, do_unlink=True)
+            new_objs.remove(obj)
+
+    # build_all.py is authored around the flare scene center near (0, -4, 0).
+    offset = Vector((loc[0] - 0.0, loc[1] - (-4.0), loc[2] - 0.0))
+    translation = Matrix.Translation(offset)
+    world_matrices = {obj: obj.matrix_world.copy() for obj in new_objs}
+    for obj in new_objs:
+        obj.matrix_world = translation @ world_matrices[obj]
+
+
 def add_arrow(name: str, loc: Vec3, direction="X", material=None):
     """Плоская стрелка направления потока вместо торчащего конуса.
 
@@ -1153,6 +1188,7 @@ def build_field():
     add_facility_dns((-6, -1, 0))
     add_facility_upsv((5, 0, 0))
     add_facility_upn((17, 0, 0))
+    add_facility_flare((15, 8, 0))
 
     # Трубопроводы добычи: куст -> ДНС
     manifold = (-13, -6, 0.72)

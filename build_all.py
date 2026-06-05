@@ -67,6 +67,8 @@ and flare_tip_final.py so it can be run directly with:
 import bpy, math, os
 from mathutils import Vector, Matrix
 
+_FLARE_IMPORT_MODE = globals().get("_FLARE_IMPORT_MODE", False)
+
 # ═══════ INLINE MODULE: flare_tip_final.py ═══════
 
 
@@ -3277,9 +3279,10 @@ def build_cameras_and_lights():
 
 
 
-bpy.ops.object.select_all(action='SELECT')
-bpy.ops.object.delete(use_global=False)
-bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+if not _FLARE_IMPORT_MODE:
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.delete(use_global=False)
+    bpy.ops.outliner.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
 
 # ═══════ МАТЕРИАЛЫ ═══════
 def mat(name, rgb, rough=0.45, metal=0.25):
@@ -3445,10 +3448,11 @@ def route(points, r, m=MS, seg=12, name="R", joint_m=None):
 
 # ═══════ ЗЕМЛЯ + ПЛОЩАДКА ═══════
 # Земля ниже, площадка толще и выше — чтобы не было наложения
-bpy.ops.mesh.primitive_plane_add(size=60, location=(0, -2, -0.03))
-sm(obj=bpy.context.active_object, m=MG)
-bpy.context.active_object.name = "Ground"
-cube((0, -2, 0.06), (24, 18, 0.06), name="Pad", m=MN)
+if not _FLARE_IMPORT_MODE:
+    bpy.ops.mesh.primitive_plane_add(size=60, location=(0, -2, -0.03))
+    sm(obj=bpy.context.active_object, m=MG)
+    bpy.context.active_object.name = "Ground"
+    cube((0, -2, 0.06), (24, 18, 0.06), name="Pad", m=MN)
 
 # ═══════ 1. СТВОЛ ═══════
 H, R, FX, FY = 38.0, 0.65, 0.0, -1.0
@@ -3720,38 +3724,41 @@ PURGE_Z = SHOE_Z + 0.12 + 0.03
 # Бетонная плита под всем сепаратором, выступает за габариты
 
 # ═══════ 10. СВЕТ ═══════
-bpy.ops.object.light_add(type='SUN', location=(25, -20, 35))
-bpy.context.active_object.data.energy = 4.5
+if not _FLARE_IMPORT_MODE:
+    bpy.ops.object.light_add(type='SUN', location=(25, -20, 35))
+    bpy.context.active_object.data.energy = 4.5
 
 # ═══════ 10. КАМЕРА ═══════
-bpy.ops.object.camera_add()
-cam = bpy.context.active_object
-cam.name = "Camera"
-cam.data.lens = 18
-cam.location = Vector((28, -30, 22))
-tgt = Vector((-4, -3, 15))
-cam.rotation_euler = (tgt - cam.location).to_track_quat('-Z', 'Y').to_euler()
-bpy.context.scene.camera = cam
+if not _FLARE_IMPORT_MODE:
+    bpy.ops.object.camera_add()
+    cam = bpy.context.active_object
+    cam.name = "Camera"
+    cam.data.lens = 18
+    cam.location = Vector((28, -30, 22))
+    tgt = Vector((-4, -3, 15))
+    cam.rotation_euler = (tgt - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    bpy.context.scene.camera = cam
 
 # ═══════ 11. EEVEE + ГОЛУБОЕ НЕБО ═══════
-s = bpy.context.scene
-s.render.engine = 'BLENDER_EEVEE'
-s.eevee.taa_render_samples = 32
-s.view_settings.exposure = 1.2
-s.render.resolution_x = 1920
-s.render.resolution_y = 1080
-s.render.image_settings.file_format = 'PNG'
+if not _FLARE_IMPORT_MODE:
+    s = bpy.context.scene
+    s.render.engine = 'BLENDER_EEVEE'
+    s.eevee.taa_render_samples = 32
+    s.view_settings.exposure = 1.2
+    s.render.resolution_x = 1920
+    s.render.resolution_y = 1080
+    s.render.image_settings.file_format = 'PNG'
 
-# Голубое небо
-w = bpy.data.worlds['World']
-w.use_nodes = True
-w.node_tree.nodes['Background'].inputs['Color'].default_value = (0.45, 0.68, 0.90, 1.0)
-w.node_tree.nodes['Background'].inputs['Strength'].default_value = 1.2
+    # Голубое небо
+    w = bpy.data.worlds['World']
+    w.use_nodes = True
+    w.node_tree.nodes['Background'].inputs['Color'].default_value = (0.45, 0.68, 0.90, 1.0)
+    w.node_tree.nodes['Background'].inputs['Strength'].default_value = 1.2
 
-# ── СОХРАНЕНИЕ + РЕНДЕР ──
-blend_path = "/home/pomadoro/projects/flare-predictor/blender/flare_install.blend"
-render_path = "/home/pomadoro/projects/flare-predictor/blender/0001.png"
-bpy.ops.wm.save_as_mainfile(filepath=blend_path)
-s.render.filepath = render_path
-bpy.ops.render.render(write_still=True)
-print("✅ v14 сохранена + рендер: {}".format(render_path))
+    # ── СОХРАНЕНИЕ + РЕНДЕР ──
+    blend_path = "/home/pomadoro/projects/flare-predictor/blender/flare_install.blend"
+    render_path = "/home/pomadoro/projects/flare-predictor/blender/0001.png"
+    bpy.ops.wm.save_as_mainfile(filepath=blend_path)
+    s.render.filepath = render_path
+    bpy.ops.render.render(write_still=True)
+    print("✅ v14 сохранена + рендер: {}".format(render_path))
