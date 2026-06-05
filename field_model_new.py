@@ -88,6 +88,7 @@ PIPE_SPEC = {
 
 FLANGE_SCALE = 1.38
 SUPPORT_MIN_Z = 0.42
+EQUIPMENT_ZONES = []
 
 
 def make_materials():
@@ -273,14 +274,16 @@ def add_flange(name: str, loc: Vec3, direction: Vec3, pipe_radius: float, materi
     )
 
 
-def add_pipe_support_at(name: str, p: Vec3, pipe_radius: float):
-    """H-поддержка под трубой с прижимной скобой."""
+def add_pipe_support_at(name: str, p: Vec3, pipe_radius: float, direction: Vec3 = (0, 1, 0)):
+    """H-поддержка под трубой с ориентацией перпендикулярно направлению трубы."""
     x, y, z = p
     if z <= SUPPORT_MIN_Z:
         return
+    for (x0, x1, y0, y1) in EQUIPMENT_ZONES:
+        if x0 <= x <= x1 and y0 <= y <= y1:
+            return
     top_z = max(0.20, z - pipe_radius - 0.05)
-    add_h_support(name, x, y, top_z)
-    add_box(name + "_clamp", (x, y, z - pipe_radius * 0.15), (pipe_radius * 2.8, pipe_radius * 1.1, pipe_radius * 0.35), MATS["orange"])
+    add_h_support(name, x, y, top_z, direction)
 
 
 def cylinder_between(name: str, p1: Vec3, p2: Vec3, radius: float, material, vertices=24):
@@ -304,19 +307,15 @@ def cylinder_between(name: str, p1: Vec3, p2: Vec3, radius: float, material, ver
 
 
 def pipe_path(name: str, points: Iterable[Vec3], radius: float, material, elevated=True, bend_factor=4.0):
-    """Связная трасса трубы.
-
-    Прямые участки подрезаются у 90° углов, а сами углы строятся как
-    четверть тора. Сферических "шариков" на поворотах нет: концы получают
-    фланцы/заглушки, промежуточные прямые стыки — короткие муфты.
-
-    bend_factor: множитель радиуса отвода (default 4.0). Уменьшить для
-    более резких поворотов (например 2.0 для компактных участков УПН).
-    """
+    """Связная трасса трубы — единый меш без видимых швов."""
     pts = [Vector(p) for p in points]
     if len(pts) < 2:
         return
     bend_radius = radius * bend_factor
+    all_verts = []
+    all_faces = []
+    vert_offset = 0
+    ring = 20
 
     def is_elbow(i: int) -> bool:
         if i <= 0 or i >= len(pts) - 1:
@@ -336,19 +335,68 @@ def pipe_path(name: str, points: Iterable[Vec3], radius: float, material, elevat
             start = pts[i] + direction * bend_radius
         if is_elbow(i + 1):
             end = pts[i + 1] - direction * bend_radius
-        if (end - start).length > radius * 2.0:
-            cylinder_between(f"{name}_straight_{i+1:02d}", tuple(start), tuple(end), radius, material, vertices=28)
-            if elevated:
-                span = end - start
-                steps = max(1, int(span.length // 3.8))
-                for k in range(1, steps + 1):
-                    p = start + span * (k / (steps + 1))
-                    add_pipe_support_at(f"{name}_support_{i+1:02d}_{k:02d}", tuple(p), radius)
+        seg_len = (end - start).length
+        if seg_len <= radius * 2.0:
+            continue
+
+        right = Vector((0, 1, 0)) if abs(direction.y) < 0.9 else Vector((1, 0, 0))
+        right = (right - right.dot(direction) * direction).normalized()
+        up = direction.cross(right).normalized()
+        n_rings = max(2, int(seg_len / (radius * 0.8)) + 1)
+        for ring_i in range(n_rings + 1):
+            t = ring_i / n_rings
+            center = start + (end - start) * t
+            for j in range(ring):
+                a = 2 * math.pi * j / ring
+                pos = center + right * (radius * math.cos(a)) + up * (radius * math.sin(a))
+                all_verts.append(tuple(pos))
+        for ring_i in range(n_rings):
+            for j in range(ring):
+                a = ring_i * ring + j
+                b = ring_i * ring + (j + 1) % ring
+                c2 = (ring_i + 1) * ring + (j + 1) % ring
+                d = (ring_i + 1) * ring + j
+                all_faces.append((a + vert_offset, b + vert_offset, c2 + vert_offset, d + vert_offset))
+        vert_offset += (n_rings + 1) * ring
+
+        if elevated:
+            span = end - start
+            steps = max(1, int(span.length // 3.8))
+            for k in range(1, steps + 1):
+                p = start + span * (k / (steps + 1))
+                add_pipe_support_at(f"{name}_support_{i+1:02d}_{k:02d}", tuple(p), radius, tuple(direction))
 
     # Фитинги: 90° = четверть тора, прямые промежуточные точки = фланцевая муфта.
     for i in range(1, len(pts) - 1):
         if is_elbow(i):
-            add_quarter_torus_elbow(f"{name}_elbow_{i:02d}", tuple(pts[i]), tuple(pts[i - 1]), tuple(pts[i + 1]), radius, material, bend_radius=bend_radius)
+            c = pts[i]
+            u = _unit(pts[i - 1] - c)
+            v = _unit(pts[i + 1] - c)
+            if u.length == 0 or v.length == 0 or abs(u.dot(v)) > 0.12:
+                continue
+            plane_n = u.cross(v)
+            if plane_n.length <= 1e-8:
+                continue
+            plane_n.normalize()
+            center = c + u * bend_radius + v * bend_radius
+            seg = 16
+            for si in range(seg + 1):
+                t = (math.pi / 2) * si / seg
+                arc = center - v * (bend_radius * math.cos(t)) - u * (bend_radius * math.sin(t))
+                tangent = _unit(v * math.sin(t) - u * math.cos(t))
+                binormal = _unit(tangent.cross(plane_n))
+                for j in range(ring):
+                    a = 2 * math.pi * j / ring
+                    pos = arc + plane_n * (radius * math.cos(a)) + binormal * (radius * math.sin(a))
+                    all_verts.append(tuple(pos))
+            for si in range(seg):
+                for j in range(ring):
+                    a = si * ring + j
+                    b = si * ring + (j + 1) % ring
+                    c2 = (si + 1) * ring + (j + 1) % ring
+                    d = (si + 1) * ring + j
+                    all_faces.append((a + vert_offset, b + vert_offset, c2 + vert_offset, d + vert_offset))
+            vert_offset += (seg + 1) * ring
         else:
             d = _unit(pts[i + 1] - pts[i - 1])
             # Муфты/стыковые шайбы делаем стальными, а не цветом трубы: так они
@@ -358,6 +406,13 @@ def pipe_path(name: str, points: Iterable[Vec3], radius: float, material, elevat
     # Видимые фланцы на начальном и конечном подключении к оборудованию.
     add_flange(f"{name}_start_flange", tuple(pts[0]), tuple(pts[1] - pts[0]), radius, material)
     add_flange(f"{name}_end_flange", tuple(pts[-1]), tuple(pts[-1] - pts[-2]), radius, material)
+
+    if all_verts:
+        new_mesh_obj(name, all_verts, all_faces, material)
+        try:
+            bpy.ops.object.shade_smooth()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -427,6 +482,9 @@ def add_label(text: str, loc: Vec3, size=0.42, rot_z=0.0):
 
 def add_pad(name: str, loc: Vec3, sx: float, sy: float):
     add_box(name, (loc[0], loc[1], 0.025), (sx, sy, 0.05), MATS["gravel"])
+    x, y = loc[0], loc[1]
+    half_w, half_h = sx / 2, sy / 2
+    EQUIPMENT_ZONES.append((x - half_w, x + half_w, y - half_h, y + half_h))
 
 
 def add_road(name: str, p1: Vec3, p2: Vec3, width=1.0):
@@ -498,11 +556,17 @@ def build_road_network():
 # ---------------------------------------------------------------------------
 
 
-def add_h_support(name: str, x: float, y: float, top_z: float):
+def add_h_support(name: str, x: float, y: float, top_z: float, direction: Vec3 = (0, 1, 0)):
+    dx, dy = abs(direction[0]), abs(direction[1])
     post_h = max(0.45, top_z)
-    for off in (-0.42, 0.42):
-        add_box(name + f"_post_{off}", (x, y + off, post_h / 2), (0.08, 0.08, post_h), MATS["steel"])
-    add_box(name + "_beam", (x, y, post_h), (0.10, 1.05, 0.08), MATS["steel"])
+    if dx > dy:
+        for off in (-0.42, 0.42):
+            add_box(name + f"_post_{off}", (x, y + off, post_h / 2), (0.08, 0.08, post_h), MATS["steel"])
+        add_box(name + "_beam", (x, y, post_h), (0.10, 1.05, 0.08), MATS["steel"])
+    else:
+        for off in (-0.42, 0.42):
+            add_box(name + f"_post_{off}", (x + off, y, post_h / 2), (0.08, 0.08, post_h), MATS["steel"])
+        add_box(name + "_beam", (x, y, post_h), (1.05, 0.10, 0.08), MATS["steel"])
 
 
 def add_valve_tree(name: str, loc: Vec3, scale=1.0, injection=False):
@@ -666,7 +730,6 @@ def add_tank(name: str, loc: Vec3, radius=1.0, height=2.0, label=""):
     spool_out_end   = (x + radius + spool_len, y, nozzle_z)
     cylinder_between(name + "_outlet_spool", spool_out_start, spool_out_end, spool_r, MATS["steel"], vertices=14)
     add_flange(name + "_outlet_nozzle", spool_out_end, (1, 0, 0), spool_r, MATS["steel"])
-    add_cylinder(name + "_top_vent", (x, y, base_z + 0.28 + height + 0.62), 0.07, 0.36, MATS["steel"], vertices=16)
     if label:
         add_label(label, (x, y - radius - 0.7, base_z + 0.08), size=0.32)
 
@@ -1139,15 +1202,7 @@ def build_field():
     ], 0.15, MATS["pipe_oil"])
     add_flange("UPSV_sep1_outlet_flange", (4.98, 1.1, 1.20), (1, 0, 0), 0.15, MATS["steel"])
 
-    # --- Перелив водяного бака: от верхнего центра бака вверх, затем
-    #     горизонтально к outlet-патрубку. ---
-    pipe_path("UPSV_water_tank_overflow", [
-        (7.20, 0.90, 2.70),   # верхний центр бака
-        (7.20, 0.90, 2.85),   # подъём над баком
-        (7.80, 0.90, 2.85),   # горизонтально к правому краю
-        (7.80, 0.90, 1.09),   # спуск снаружи бака до уровня outlet
-        (8.10, 0.90, 1.09),   # подключение к outlet-патрубку по +X
-    ], 0.04, MATS["pipe_water"])
+    # Перелив водяного бака удалён — соединяется напрямую через Produced_water_UPSV_to_KNS
 
     # --- Produced Water: от outlet-фланца бака на север
     #     (на высоте outlet), на запад к КНС. Без коллизий с оборудованием. ---
@@ -1170,12 +1225,12 @@ def build_field():
     # Резервуар A -> резервуар B (уравнительная перемычка, прямой спул)
     cylinder_between("UPN_tanks_equalizing_spool", (18.63, 1.00, 1.225), (19.87, 1.00, 1.225), 0.105, MATS["pipe_product"], vertices=24)
 
-    # Резервуар B -> насос suction: прямоугольная трасса на юг, вниз и на запад
+    # Резервуар B -> насос suction: С-образная трасса (вниз, на запад, на юг)
     pipe_path("UPN_tank_B_to_pump_suction", [
         (22.13, 1.00, 1.225),   # правый nozzle tank_B
-        (22.13, -3.00, 1.225),  # к югу до уровня насосов
-        (22.13, -3.00, 0.55),   # спуск к suction_header
-        (18.02, -3.00, 0.55),   # на запад к suction_header
+        (22.13, 1.00, 0.55),    # спуск к низкому уровню (90° отвод)
+        (18.02, 1.00, 0.55),    # на запад к оси suction_header (90° отвод)
+        (18.02, -3.00, 0.55),   # на юг к началу suction_header (90° отвод)
     ], 0.13, MATS["pipe_product"], bend_factor=2.0)
     add_flange("UPN_tank_B_outlet_flange", (22.13, 1.00, 1.225), (1, 0, 0), 0.13, MATS["steel"])
 
@@ -1187,7 +1242,7 @@ def build_field():
     ], 0.16, MATS["pipe_product"], bend_factor=2.0)
     add_flange("UPN_export_boundary_flange", (29.00, -3.00, 1.20), (1, 0, 0), 0.16, MATS["steel"])
     for idx, p in enumerate([(22.70, -3.00, 1.20), (25.15, -3.00, 1.20), (27.40, -3.00, 1.20)], start=1):
-        add_pipe_support_at(f"UPN_export_support_{idx}", p, 0.16)
+        add_pipe_support_at(f"UPN_export_support_{idx}", p, 0.16, (1, 0, 0))
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
 
     # Вода: КНС -> БКНС -> нагнетательная скважина
@@ -1203,6 +1258,10 @@ def build_field():
     # Газовая линия и факел
     # Все газовые трубы на единой высоте z=2.30 с 90° торообразными отводами
     # (add_quarter_torus_elbow) на каждом повороте — через единый pipe_path.
+
+    # DNS group_meter gas_nozzle -> газовый коллектор (продлён до встречи с трубой)
+    cylinder_between("DNS_group_meter_gas_riser", (-0.3, -0.9, 1.89), (-0.3, -0.9, 2.30), 0.05, MATS["pipe_gas"], vertices=16)
+    cylinder_between("DNS_group_meter_gas_tie", (-0.3, -0.9, 2.30), (-0.3, -0.7, 2.30), 0.05, MATS["pipe_gas"], vertices=16)
 
     # ДНС→УПСВ: от gas_nozzle DNS до T-junction над UPSV, спуск к sep2
     pipe_path("Gas_line_DNS_UPSV", [
