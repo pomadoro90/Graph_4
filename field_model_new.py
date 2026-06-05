@@ -573,9 +573,7 @@ def add_horizontal_vessel(name: str, loc: Vec3, length: float, radius: float, ma
     x, y, z = loc
     # страховка: центр не ниже радиуса + небольшой зазор под седла
     z = max(z, radius + 0.35)
-    add_cylinder(name + "_body", (x, y, z), radius, length, material, axis="X", vertices=40)
-    add_cylinder(name + "_left_head", (x - length / 2, y, z), radius, 0.08, material, axis="X", vertices=40)
-    add_cylinder(name + "_right_head", (x + length / 2, y, z), radius, 0.08, material, axis="X", vertices=40)
+    add_cylinder(name + "_body", (x, y, z), radius, length + 0.16, material, axis="X", vertices=40)
     saddle_h = max(0.12, z - radius)
     for sx in (-0.34, 0.34):
         sx_abs = x + sx * length
@@ -591,11 +589,10 @@ def add_horizontal_vessel(name: str, loc: Vec3, length: float, radius: float, ma
 def add_tank(name: str, loc: Vec3, radius=1.0, height=2.0, label=""):
     x, y, z = loc
     base_z = 0.0 if z < 0.02 else z
-    # фундаментное кольцо и юбка: резервуар не висит и не стоит "в воздухе".
+    # фундаментное кольцо остается отдельным объектом с материалом гравия.
     add_cylinder(name + "_foundation", (x, y, base_z + 0.08), radius + 0.42, 0.16, MATS["gravel"], vertices=56)
-    add_cylinder(name + "_skirt", (x, y, base_z + 0.22), radius * 1.02, 0.28, MATS["steel"], vertices=56)
-    add_cylinder(name + "_wall", (x, y, base_z + 0.28 + height / 2), radius, height, MATS["tank"], vertices=56)
-    add_cylinder(name + "_roof", (x, y, base_z + 0.28 + height + 0.08), radius * 0.98, 0.16, MATS["tank"], vertices=56)
+    add_cylinder(name + "_body", (x, y, base_z + 0.16 + (height + 0.28) / 2), radius, height + 0.28, MATS["tank"], vertices=56)
+    add_cone(name + "_roof", (x, y, base_z + 0.28 + height + 0.08), radius * 0.98, radius * 0.18, 0.16, MATS["tank"], vertices=56)
     add_cylinder(name + "_roof_center_cap", (x, y, base_z + 0.28 + height + 0.22), radius * 0.18, 0.12, MATS["steel"], vertices=24)
     # боковые патрубки/фланцы: nozzle spool торчит из стенки, flange на конце spool
     nozzle_z = base_z + 0.28 + min(1.0, height * 0.45)
@@ -1217,4 +1214,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
