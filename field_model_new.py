@@ -1332,10 +1332,20 @@ def build_field():
     ], 0.07, MATS["pipe_gas"])
     add_flange("UPN_treater_gas_riser_flange", (14.5, 1.0, 2.00), (0, 0, -1), 0.07, MATS["pipe_gas"])
 
+    # Ответвление газопровода к сепаратору факельной установки
+    pipe_path("Gas_line_UPN_to_flare_sep", [
+        (14.5, 3.35, 2.30),    # T-junction на газопроводе УПСВ→УПН
+        (14.5, 3.35, 4.20),    # подъём до уровня входа сепаратора
+        (19.27, 3.35, 4.20),   # горизонтально на восток
+        (19.27, 17.14, 4.20),  # на север к входу сепаратора
+    ], 0.07, MATS["pipe_gas"])
+    add_flange("Flare_sep_inlet_flange", (19.27, 17.14, 4.20), (0, 1, 0), 0.07, MATS["pipe_gas"])
+
     # Стрелки потоков
     add_arrow("Arrow_gathering", (-9.0, -3.8, 1.15), direction="Y", material=MATS["orange"])
     add_arrow("Arrow_dns_upsv", (0.5, -1.0, 1.35), direction="X", material=MATS["orange"])
     add_arrow("Arrow_upsv_upn", (11.0, 0.2, 1.4), direction="X", material=MATS["orange"])
+    add_arrow("Arrow_gas_to_flare", (17, 10, 3.2), direction="Y", material=MATS["pipe_gas"])
     add_arrow("Arrow_export", (25.5, -2.2, 1.2), direction="X", material=MATS["pipe_product"])
     add_arrow("Arrow_water_to_bkns", (2.0, 12.0, 1.15), direction="-X", material=MATS["blue"])
     add_arrow("Arrow_water_to_inj", (-4.0, 15.0, 1.25), direction="X", material=MATS["blue"])
