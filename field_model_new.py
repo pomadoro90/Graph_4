@@ -303,17 +303,20 @@ def cylinder_between(name: str, p1: Vec3, p2: Vec3, radius: float, material, ver
     return obj
 
 
-def pipe_path(name: str, points: Iterable[Vec3], radius: float, material, elevated=True):
+def pipe_path(name: str, points: Iterable[Vec3], radius: float, material, elevated=True, bend_factor=4.0):
     """Связная трасса трубы.
 
     Прямые участки подрезаются у 90° углов, а сами углы строятся как
     четверть тора. Сферических "шариков" на поворотах нет: концы получают
     фланцы/заглушки, промежуточные прямые стыки — короткие муфты.
+
+    bend_factor: множитель радиуса отвода (default 4.0). Уменьшить для
+    более резких поворотов (например 2.0 для компактных участков УПН).
     """
     pts = [Vector(p) for p in points]
     if len(pts) < 2:
         return
-    bend_radius = radius * 4.0
+    bend_radius = radius * bend_factor
 
     def is_elbow(i: int) -> bool:
         if i <= 0 or i >= len(pts) - 1:
@@ -1157,41 +1160,40 @@ def build_field():
     ], 0.11, MATS["pipe_water"])
     add_flange("UPSV_water_tank_outlet_flange", (8.10, 0.9, 1.09), (1, 0, 0), 0.11, MATS["pipe_water"])
 
-    # УПН / товарная нефть: схема перестроена как связная цепочка
-    # treater -> резервуары -> насосный skid -> экспорт. Артефактов между
-    # резервуарами нет: если элементы стоят рядом, они соединены короткой
-    # уравнительной перемычкой; все углы идут через pipe_path() и тороидальные
-    # elbow-mesh, без сферических узлов.
-    treater_out = (16.43, 1.00, 1.20)
-    tank_a_in = (17.37, 1.20, 1.225)
-    tank_a_out = (19.38, 1.20, 1.225)
-    tank_b_in = (19.57, 1.20, 1.225)
-    tank_b_out = (21.58, 1.20, 1.225)
-    pump_suction_top = (18.02, -1.25, 0.55)
-    pump_discharge_mid = (20.42, -1.85, 0.62)
+    # УПН / товарная нефть: все трубы на уровне z=1.20 с 90°
+    # торообразными отводами. Наклонных cylinder_between больше нет.
 
-    # Treater -> первый резервуар
-    cylinder_between("UPN_treater_to_sales_tank_A_simple_sloped_spool", treater_out, tank_a_in, 0.12, MATS["pipe_product"], vertices=28)
-    add_flange("UPN_treater_outlet_simple_flange", treater_out, (1, 0, 0), 0.12, MATS["steel"])
-    add_flange("UPN_sales_tank_A_inlet_simple_flange", tank_a_in, (1, 0, 0), 0.12, MATS["steel"])
-    cylinder_between("UPN_sales_tanks_equalizing_spool", tank_a_out, tank_b_in, 0.105, MATS["pipe_product"], vertices=24)
-    add_flange("UPN_sales_tank_A_equalizing_flange", tank_a_out, (1, 0, 0), 0.105, MATS["steel"])
-    add_flange("UPN_sales_tank_B_equalizing_flange", tank_b_in, (1, 0, 0), 0.105, MATS["steel"])
-    # Второй резервуар -> насос
-    cylinder_between("UPN_sales_tank_B_to_export_pump_suction_simple_spool", tank_b_out, pump_suction_top, 0.13, MATS["pipe_product"], vertices=28)
-    add_flange("UPN_sales_tank_B_to_pump_suction_tank_flange", tank_b_out, (1, 0, 0), 0.13, MATS["steel"])
-    add_flange("UPN_sales_tank_B_to_pump_suction_pump_flange", pump_suction_top, (-1, 0, 0), 0.13, MATS["steel"])
-    add_pipe_support_at("UPN_tank_to_pump_suction_support_1", (20.00, -0.05, 1.05), 0.13)
+    # Treater outlet -> резервуар A: L-образный маршрут с 90° отводом
+    pipe_path("UPN_treater_to_tank_A", [
+        (16.43, 1.00, 1.20),  # правый nozzle treater
+        (16.80, 1.00, 1.20),  # выход по +X от treater
+        (16.80, 1.20, 1.20),   # поворот на +Y к оси резервуаров
+        (17.07, 1.20, 1.20),   # вход в левый nozzle tank_A
+    ], 0.12, MATS["pipe_product"], bend_factor=1.5)
+    add_flange("UPN_treater_outlet_flange", (16.43, 1.00, 1.20), (1, 0, 0), 0.12, MATS["steel"])
+    add_flange("UPN_tank_A_inlet_flange", (17.07, 1.20, 1.20), (-1, 0, 0), 0.12, MATS["steel"])
 
-    # Выход с насосной станции
-    export_riser_top = (20.42, -1.85, 1.12)
-    export_end = (29.00, -1.85, 1.12)
-    cylinder_between("UPN_export_pump_discharge_vertical_riser", pump_discharge_mid, export_riser_top, 0.16, MATS["pipe_product"], vertices=28)
-    cylinder_between("UPN_export_pumps_to_sales_oil_export_straight", export_riser_top, export_end, 0.16, MATS["pipe_product"], vertices=28)
-    add_flange("UPN_export_pump_discharge_riser_flange", export_riser_top, (1, 0, 0), 0.16, MATS["steel"])
-    add_flange("UPN_export_boundary_flange", export_end, (1, 0, 0), 0.16, MATS["steel"])
-    for idx, p in enumerate([(22.70, -1.85, 1.12), (25.15, -1.85, 1.12), (27.40, -1.85, 1.12)], start=1):
-        add_pipe_support_at(f"UPN_export_connected_support_{idx}", p, 0.16)
+    # Резервуар A -> резервуар B (уравнительная перемычка, прямой спул)
+    cylinder_between("UPN_tanks_equalizing_spool", (19.33, 1.20, 1.225), (19.22, 1.20, 1.225), 0.105, MATS["pipe_product"], vertices=24)
+
+    # Резервуар B -> насос suction (с вертикальным стояком и 90° отводами)
+    pipe_path("UPN_tank_B_to_pump_suction", [
+        (21.53, 1.20, 1.225),  # правый nozzle tank_B
+        (21.53, -1.25, 1.225),  # к югу за насосный блок
+        (21.53, -1.25, 0.55),  # спуск к suction_header (90° отводы)
+        (18.02, -1.25, 0.55),  # горизонтально к suction_header
+    ], 0.13, MATS["pipe_product"], bend_factor=2.0)
+    add_flange("UPN_tank_B_outlet_flange", (21.53, 1.20, 1.225), (1, 0, 0), 0.13, MATS["steel"])
+
+    # Насос discharge -> экспорт (с вертикальным стояком и 90° отводами)
+    pipe_path("UPN_pump_to_export", [
+        (20.42, -1.85, 0.62),  # discharge_header
+        (20.42, -1.85, 1.20),  # подъём до уровня коллектора
+        (29.00, -1.85, 1.20),  # горизонтально к экспорту
+    ], 0.16, MATS["pipe_product"], bend_factor=2.0)
+    add_flange("UPN_export_boundary_flange", (29.00, -1.85, 1.20), (1, 0, 0), 0.16, MATS["steel"])
+    for idx, p in enumerate([(22.70, -1.85, 1.20), (25.15, -1.85, 1.20), (27.40, -1.85, 1.20)], start=1):
+        add_pipe_support_at(f"UPN_export_support_{idx}", p, 0.16)
     add_label("товарная нефть\nна внешний\nнефтепровод", (28, -6.2, 0.08), size=0.32)
 
     # Вода: КНС -> БКНС -> нагнетательная скважина
@@ -1208,26 +1210,24 @@ def build_field():
     # Все газовые трубы на единой высоте z=2.30 с 90° торообразными отводами
     # (add_quarter_torus_elbow) на каждом повороте — через единый pipe_path.
 
-    # ДНС→УПСВ: от gas_nozzle DNS вертикально вверх, затем горизонтально к UPSV sep2
+    # ДНС→УПСВ: от gas_nozzle DNS до T-junction над UPSV, спуск к sep2
     pipe_path("Gas_line_DNS_UPSV", [
         (-6.3, -1.9, 2.03),   # DNS gas_nozzle
         (-6.3, -1.9, 2.30),   # подъём до уровня коллектора (90° отвод)
         (-6.3, -0.7, 2.30),   # поворот на юг (90° отвод)
         (3.3, -0.7, 2.30),    # горизонтально к УПСВ (90° отвод)
+        (3.3, -0.7, 1.83),    # спуск к sep2 gas_nozzle (90° отвод)
     ], 0.07, MATS["pipe_gas"])
     add_flange("DNS_gas_riser_flange", (-6.3, -1.9, 2.03), (0, 0, 1), 0.07, MATS["pipe_gas"])
 
-    # УПСВ→УПН: от gas_nozzle UPSV sep2 вертикально вверх, горизонтально за УПН,
-    # спуск к gas_nozzle treater — все повороты через торообразные отводы
+    # УПСВ→УПН: от T-junction над UPSV до treater gas_nozzle
     pipe_path("Gas_line_UPSV_UPN", [
-        (3.3, -0.7, 1.83),   # UPSV sep2 gas_nozzle
-        (3.3, -0.7, 2.30),   # подъём до уровня коллектора (90° отвод)
-        (3.3, 3.35, 2.30),   # поворот на север (90° отвод)
-        (14.5, 3.35, 2.30),  # горизонтально к УПН (90° отвод)
-        (14.5, 1.0, 2.30),   # поворот на юг (90° отвод)
-        (14.5, 1.0, 2.00),   # спуск к treater gas_nozzle (90° отвод)
+        (3.3, -0.7, 2.30),    # T-junction над sep2
+        (3.3, 3.35, 2.30),    # поворот на север (90° отвод)
+        (14.5, 3.35, 2.30),   # горизонтально к УПН (90° отвод)
+        (14.5, 1.0, 2.30),    # поворот на юг (90° отвод)
+        (14.5, 1.0, 2.00),    # спуск к treater gas_nozzle (90° отвод)
     ], 0.07, MATS["pipe_gas"])
-    add_flange("UPSV_sep2_gas_riser_flange", (3.3, -0.7, 1.83), (0, 0, 1), 0.07, MATS["pipe_gas"])
     add_flange("UPN_treater_gas_riser_flange", (14.5, 1.0, 2.00), (0, 0, -1), 0.07, MATS["pipe_gas"])
 
     # Стрелки потоков
