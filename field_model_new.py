@@ -1052,7 +1052,7 @@ def add_scene_animations():
         add_pumpjack_animation(f"Producing_well_{i}", p, scale=pump_scale, start_frame=1, end_frame=120)
     animate_flow_arrow("Arrow_gathering", [(-13, -6, 1.15), (-10.5, -6, 1.15), (-10.5, -1.9, 1.15), (-7.88, -1.9, 1.15)])
     animate_flow_arrow("Arrow_dns_upsv", [(-4.70, -1.9, 1.35), (-1.0, -1.9, 1.35), (-1.0, 1.1, 1.35), (1.62, 1.1, 1.35)])
-    animate_flow_arrow("Arrow_upsv_upn", [(4.98, 1.1, 1.40), (5.80, 1.1, 0.60), (5.80, -2.55, 0.45), (12.57, -2.55, 0.60), (12.57, 1.0, 1.40)])
+    animate_flow_arrow("Arrow_upsv_upn", [(4.98, 1.1, 1.40), (4.98, -2.55, 1.20), (12.57, -2.55, 1.20), (12.57, 1.0, 1.40)])
     animate_flow_arrow("Arrow_export", [(20.42, -1.85, 1.32), (29.0, -1.85, 1.32)])
     animate_flow_arrow("Arrow_water_to_bkns", [(11.35, 13.85, 1.15), (-5.18, 13.85, 1.15), (-5.18, 12.0, 1.15)])
     animate_flow_arrow("Arrow_water_to_inj", [(-2.78, 12.0, 1.25), (-2.78, 15.0, 1.25), (-0.20, 15.0, 1.25)])
@@ -1128,10 +1128,8 @@ def build_field():
     #     УПН. Не пересекает ни reagent_block, ни water_tank. ---
     pipe_path("UPSV_to_UPN_treater_inlet", [
         (4.98, 1.1, 1.10),    # правый nozzle separator_1 (фланец аппарата)
-        (5.80, 1.1, 1.10),    # выход по +X от аппарата
-        (5.80, 1.1, 0.40),    # спуск вниз под оборудование
-        (5.80, -2.55, 0.40),  # выход на свободный южный коридор
-        (12.57, -2.55, 0.45), # горизонтально к УПН
+        (4.98, -2.55, 1.10),  # выход на свободный южный коридор
+        (12.57, -2.55, 1.10), # горизонтально к УПН
         (12.57, 1.00, 1.20),  # подъём к treater
     ], 0.15, MATS["pipe_oil"])
     add_flange("UPSV_sep1_outlet_flange", (4.98, 1.1, 1.10), (1, 0, 0), 0.15, MATS["steel"])
